@@ -20,28 +20,46 @@ assets = {
 st.sidebar.header("Parametri Matematici")
 lookback = st.sidebar.slider("Giorni per Media Mobile (Z-Score)", min_value=30, max_value=200, value=90)
 
-# Funzione per scaricare i dati (viene memorizzata in cache per velocità)
-@st.cache_data
+# Funzione per scaricare i dati con correzione fuso orario
+@st.cache_data(ttl=3600)
 def get_data():
     df = pd.DataFrame()
     for name, ticker in assets.items():
         ticker_data = yf.Ticker(ticker)
         hist = ticker_data.history(period="2y")
-        df[name] = hist['Close']
+        if not hist.empty:
+            # Rimuove il fuso orario per allineare perfettamente oro, bond e azioni
+            hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
+            df[name] = hist['Close']
+    
+    # Riempiamo i "buchi" (es. giorni festivi in cui un mercato è chiuso)
+    df = df.ffill().dropna()
     return df
 
 data = get_data()
+
+# Controllo di sicurezza se Yahoo Finance è bloccato
+if data.empty:
+    st.error("Impossibile scaricare i dati da Yahoo Finance in questo momento (possibile blocco temporaneo). Riprova tra poco!")
+    st.stop()
 
 # Calcolo matematico dello Z-Score
 mean = data.rolling(window=lookback).mean()
 std = data.rolling(window=lookback).std()
 z_score = (data - mean) / std
 
+# Rimuoviamo i valori vuoti iniziali dovuti al calcolo della media mobile
+z_score_clean = z_score.dropna()
+
+if z_score_clean.empty:
+    st.warning(f"Attendi, non ci sono abbastanza dati storici per calcolare una media a {lookback} giorni.")
+    st.stop()
+
 # Sezione 1: I dati di oggi
 st.subheader("Termometro del Mercato (Ultima chiusura)")
 st.write("Valori > 0 indicano un trend superiore alla media recente. Valori < 0 indicano debolezza.")
 
-latest_z = z_score.dropna().iloc[-1]
+latest_z = z_score_clean.iloc[-1]
 
 # Creiamo 4 colonne per mostrare i numeri come in un cruscotto
 col1, col2, col3, col4 = st.columns(4)
@@ -52,7 +70,7 @@ col4.metric("VIX", f"{latest_z['VIX (Paura)']:.2f}")
 
 # Sezione 2: Grafico interattivo
 st.subheader("Evoluzione dello Z-Score nel tempo")
-fig = px.line(z_score.dropna(), title="Compara i cicli di Rischio vs Paura")
+fig = px.line(z_score_clean, title="Compara i cicli di Rischio vs Paura")
 st.plotly_chart(fig, use_container_width=True)
 
 st.caption("Dati forniti da Yahoo Finance. Applicazione a scopo educativo.")
