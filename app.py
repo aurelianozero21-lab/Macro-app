@@ -140,4 +140,4 @@ if df.empty:
 
 current = df.iloc[-1]
 
-tab1, tab2, tab3 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto & News",
+tab1, tab2, tab3 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto & News"],
