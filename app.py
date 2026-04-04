@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from fredapi import Fred
 import feedparser
 
-st.set_page_config(page_title="Macro Dashboard v13.3", layout="wide")
+st.set_page_config(page_title="Macro Dashboard v13.4", layout="wide")
 st.title("📊 Global Macro, Crypto & Geopolitics")
 
 with st.expander("📚 Legenda e Glossario"):
@@ -63,9 +63,12 @@ def load_all_data(api_key, lookback):
             
     df = df.dropna()
     def assegna_fase(row):
-        if row['YieldCurve'] < 0: return '1. Allarme Rosso (Recessione)'
-        elif row['YieldCurve'] > 0 and row['Z_S&P 500'] < 0: return '2. Ripresa (Accumulo)'
-        else: return '3. Espansione (Risk-On)'
+        if row['YieldCurve'] < 0: 
+            return '1. Allarme Rosso (Recessione)'
+        elif row['YieldCurve'] > 0 and row['Z_S&P 500'] < 0: 
+            return '2. Ripresa (Accumulo)'
+        else: 
+            return '3. Espansione (Risk-On)'
     df['Fase_Macro'] = df.apply(assegna_fase, axis=1)
     return df
 
@@ -78,7 +81,8 @@ def get_vix():
 def analyze_geopolitics():
     url = "https://news.google.com/rss/search?q=geopolitics+OR+sanctions+OR+conflict+OR+economy+markets&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
-    if not feed.entries: return 50, []
+    if not feed.entries: 
+        return 50, []
         
     risk_words = ['war', 'strike', 'tariff', 'sanction', 'crisis', 'escalat', 'missile', 'tension', 'conflict', 'invasion']
     peace_words = ['peace', 'deal', 'agreement', 'ceasefire', 'easing', 'stimulus', 'talks']
@@ -100,7 +104,8 @@ def analyze_geopolitics():
 def get_crypto_news():
     url = "https://news.google.com/rss/search?q=bitcoin+OR+ethereum+OR+cryptocurrency+OR+blockchain&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
-    if not feed.entries: return []
+    if not feed.entries: 
+        return []
     return [{'titolo': entry.title, 'link': entry.link} for entry in feed.entries[:8]]
 
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
@@ -111,3 +116,28 @@ crypto_news = []
 
 with st.spinner("📊 Scaricamento dati Macro..."):
     try:
+        df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
+        vix_val = get_vix()
+    except Exception as e:
+        st.error("Dati borsa non disponibili. Riprova più tardi.")
+        st.stop()
+
+with st.spinner("🌍 Analisi News Geopolitiche..."):
+    try: 
+        tension_index, top_news = analyze_geopolitics()
+    except Exception: 
+        pass
+
+with st.spinner("⚡ Scansione News Crypto..."):
+    try: 
+        crypto_news = get_crypto_news()
+    except Exception: 
+        pass
+
+if df.empty:
+    st.error("Dati insufficienti. Ricarica la pagina.")
+    st.stop()
+
+current = df.iloc[-1]
+
+tab1, tab2, tab3 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto & News",
