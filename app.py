@@ -7,8 +7,8 @@ from fredapi import Fred
 import feedparser
 import numpy as np
 
-st.set_page_config(page_title="Macro Dashboard v13", layout="wide")
-st.title("📊 Global Macro, Crypto & Geopolitics (v13)")
+st.set_page_config(page_title="Macro Dashboard v13.1", layout="wide")
+st.title("📊 Global Macro, Crypto & Geopolitics")
 
 with st.expander("📚 Legenda e Glossario"):
     st.markdown("""
@@ -55,50 +55,4 @@ def load_all_data(api_key, lookback):
     df['Mayer_ETH'] = df['Ethereum'] / df['ETH_200DMA']
     
     # Calcolo RSI ETH
-    delta_eth = df['Ethereum'].diff()
-    rs_eth = (delta_eth.where(delta_eth > 0, 0)).rolling(window=14).mean() / (-delta_eth.where(delta_eth < 0, 0)).rolling(window=14).mean()
-    df['RSI_ETH'] = 100 - (100 / (1 + rs_eth))
-    
-    # Macro
-    fred = Fred(api_key=api_key)
-    yc = fred.get_series('T10Y2Y')
-    yc.index = pd.to_datetime(yc.index)
-    df['YieldCurve'] = yc
-    df = df.ffill().dropna()
-    
-    # Z-Scores
-    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Petrolio', 'Treasury 10Y', 'Bitcoin', 'Ethereum']:
-        df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
-            
-    df = df.dropna()
-    def assegna_fase(row):
-        if row['YieldCurve'] < 0: return '1. Allarme Rosso (Recessione)'
-        elif row['YieldCurve'] > 0 and row['Z_S&P 500'] < 0: return '2. Ripresa (Accumulo)'
-        else: return '3. Espansione (Risk-On)'
-    df['Fase_Macro'] = df.apply(assegna_fase, axis=1)
-    return df
-
-@st.cache_data(ttl=900)
-def get_vix():
-    vix = yf.Ticker('^VIX').history(period="1mo")['Close']
-    return vix.iloc[-1] if not vix.empty else 20
-
-# --- MOTORE NLP PER NEWS GEOPOLITICHE ---
-@st.cache_data(ttl=1800)
-def analyze_geopolitics():
-    url = "https://news.google.com/rss/search?q=geopolitics+OR+sanctions+OR+conflict+OR+economy+markets&hl=en-US&gl=US&ceid=US:en"
-    feed = feedparser.parse(url)
-    risk_words = ['war', 'strike', 'tariff', 'sanction', 'crisis', 'escalat', 'missile', 'tension', 'conflict', 'invasion']
-    peace_words = ['peace', 'deal', 'agreement', 'ceasefire', 'easing', 'stimulus', 'talks']
-    
-    risk_score_raw = sum((sum(1 for w in risk_words if w in entry.title.lower()) - sum(1 for w in peace_words if w in entry.title.lower())) for entry in feed.entries[:25])
-    tension_index = max(0, min(100, 50 + (risk_score_raw * 4)))
-    news_items = [{'titolo': entry.title, 'link': entry.link, 'score': (sum(1 for w in risk_words if w in entry.title.lower()) - sum(1 for w in peace_words if w in entry.title.lower()))} for entry in feed.entries[:25] if (sum(1 for w in risk_words if w in entry.title.lower()) - sum(1 for w in peace_words if w in entry.title.lower())) != 0][:8]
-    return tension_index, news_items
-
-# --- MOTORE NLP PER NEWS CRYPTO ---
-@st.cache_data(ttl=1800)
-def get_crypto_news():
-    url = "https://news.google.com/rss/search?q=bitcoin+OR+ethereum+OR+cryptocurrency+OR+blockchain&hl=en-US&gl=US&ceid=US:en"
-    feed = feedparser.parse(url)
-    news_items =
+    delta
