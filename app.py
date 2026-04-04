@@ -4,84 +4,87 @@ import pandas as pd
 import plotly.express as px
 from fredapi import Fred
 
-# Impostazioni della pagina
-st.set_page_config(page_title="Macro Dashboard v3", layout="wide")
-st.title("📊 Global Macro Dashboard (Prototipo v3)")
+st.set_page_config(page_title="Macro Dashboard v4", layout="wide")
+st.title("📊 Global Macro Dashboard (Prototipo v4 - Backtest)")
 
-# --- RECUPERO DATI (Nascosto all'utente per pulizia) ---
+# --- RECUPERO DATI E BACKTEST ---
 @st.cache_data(ttl=3600)
-def get_market_data():
-    assets = {'S&P 500': '^GSPC', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX', 'VIX': '^VIX'}
-    df = pd.DataFrame()
-    for name, ticker in assets.items():
-        hist = yf.Ticker(ticker).history(period="2y")
-        if not hist.empty:
-            hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
-            df[name] = hist['Close']
-    return df.ffill().dropna()
-
-@st.cache_data(ttl=3600)
-def get_macro_data(api_key):
+def load_and_backtest(api_key, lookback):
+    # 1. Scarichiamo 15 anni di S&P 500
+    sp500 = yf.Ticker('^GSPC').history(period="15y")['Close']
+    sp500.index = pd.to_datetime(sp500.index).tz_localize(None).normalize()
+    
+    # 2. Scarichiamo la Curva dei Rendimenti dalla FRED
     fred = Fred(api_key=api_key)
-    yc = fred.get_series('T10Y2Y').tail(200).dropna()
-    cpi = fred.get_series('CPIAUCSL').tail(60).dropna()
-    inf = cpi.pct_change(periods=12) * 100
-    return yc.iloc[-1], inf.iloc[-1]
+    yc = fred.get_series('T10Y2Y')
+    yc.index = pd.to_datetime(yc.index)
+    
+    # 3. Uniamo i dati nello stesso calendario
+    df = pd.DataFrame({'SP500': sp500, 'YieldCurve': yc}).dropna()
+    
+    # 4. Calcoliamo lo Z-Score Storico
+    df['Z_Score'] = (df['SP500'] - df['SP500'].rolling(window=lookback).mean()) / df['SP500'].rolling(window=lookback).std()
+    df = df.dropna()
+    
+    # 5. Applichiamo l'algoritmo al passato (La Macchina del Tempo)
+    def assegna_fase(row):
+        if row['YieldCurve'] < 0:
+            return '1. Allarme Rosso (Recessione)'
+        elif row['YieldCurve'] > 0 and row['Z_Score'] < 0:
+            return '2. Ripresa (Accumulo)'
+        else:
+            return '3. Espansione (Risk-On)'
+            
+    df['Fase_Macro'] = df.apply(assegna_fase, axis=1)
+    return df
 
-# Scarichiamo i dati
-market_data = get_market_data()
-try:
-    current_yc, current_inf = get_macro_data(st.secrets["FRED_API_KEY"])
-except:
-    current_yc, current_inf = 0, 0 # Fallback in caso di errore FRED
-
+# Recuperiamo i dati
 lookback = st.sidebar.slider("Giorni per Media Mobile (Z-Score)", 30, 200, 90)
-z_score = ((market_data - market_data.rolling(window=lookback).mean()) / market_data.rolling(window=lookback).std()).dropna()
-latest_z = z_score.iloc[-1] if not z_score.empty else None
 
-# --- IL MOTORE DECISIONALE (SEMAFORO MACRO) ---
-st.header("🚦 Semaforo del Business Cycle")
+try:
+    backtest_data = load_and_backtest(st.secrets["FRED_API_KEY"], lookback)
+    current_status = backtest_data.iloc[-1]
+except Exception as e:
+    st.error(f"Errore nel caricamento dati: {e}")
+    st.stop()
 
-# Logica dell'algoritmo
-fase = "Sconosciuta"
-colore = "grey"
-suggerimento = ""
+# --- IL MOTORE DECISIONALE OGGI ---
+st.header("🚦 Semaforo Attuale")
 
-if current_yc < 0:
-    fase = "RALLENTAMENTO / RECESSIONE (Allarme Rosso)"
-    colore = "red"
-    suggerimento = "Difesa massima. Curva invertita. Sovrappesare Cash, Titoli di Stato a breve termine (2Y), Oro. Sottopesare Azionario e Crypto."
-elif current_yc > 0 and latest_z['S&P 500'] < 0:
-    fase = "RIPRESA (Inizio Ciclo)"
-    colore = "orange"
-    suggerimento = "La curva è normale ma il mercato è debole. Accumulo. Sovrappesare Bond a lunga scadenza, Azionario Tech, Bitcoin."
-elif current_yc > 0 and latest_z['S&P 500'] > 0:
-    fase = "ESPANSIONE (Risk-On)"
-    colore = "green"
-    suggerimento = "Crescita solida. Mercato in trend positivo. Sovrappesare Azionario globale, Commodities (Rame/Petrolio), Crypto. Sottopesare Bond."
+if current_status['Fase_Macro'] == '1. Allarme Rosso (Recessione)':
+    colore, suggerimento = "red", "Difesa massima. Curva invertita. Sovrappesare Cash, Bond Brevi (2Y), Oro. Sottopesare Azionario."
+elif current_status['Fase_Macro'] == '2. Ripresa (Accumulo)':
+    colore, suggerimento = "orange", "La curva è normale ma il mercato è debole. Accumulo. Sovrappesare Bond Lunghi, Azionario Tech."
+else:
+    colore, suggerimento = "green", "Crescita solida. Mercato in trend positivo. Sovrappesare Azionario, Commodities."
 
-# Creiamo un box colorato per l'output
 st.markdown(f"""
 <div style="padding: 20px; border-radius: 10px; background-color: {colore}; color: white; margin-bottom: 20px;">
-    <h3 style="margin-top: 0;">Fase Attuale: {fase}</h3>
+    <h3 style="margin-top: 0;">Fase Attuale: {current_status['Fase_Macro']}</h3>
     <p style="font-size: 16px;"><strong>Allocazione Consigliata:</strong> {suggerimento}</p>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("---")
 
-# --- SEZIONE DATI RAW ---
-col_m1, col_m2 = st.columns(2)
-col_m1.metric("Curva Rendimenti (10Y-2Y)", f"{current_yc:.2f} %", "Recession Warning!" if current_yc < 0 else "Normal", delta_color="inverse")
-col_m2.metric("Inflazione USA (YoY)", f"{current_inf:.2f} %")
+# --- LA MACCHINA DEL TEMPO (BACKTEST VISIVO) ---
+st.header("🔬 Backtest Storico (Ultimi 15 Anni)")
+st.write("Questo grafico mostra l'andamento dello S&P 500. I colori rappresentano le fasi del ciclo macroeconomico calcolate dall'algoritmo nel passato.")
 
-if latest_z is not None:
-    st.subheader("Termometro di Borsa (Z-Score)")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("S&P 500", f"{latest_z['S&P 500']:.2f}")
-    c2.metric("Oro", f"{latest_z['Oro']:.2f}")
-    c3.metric("Rendimenti 10Y", f"{latest_z['Treasury 10Y']:.2f}")
-    c4.metric("VIX", f"{latest_z['VIX']:.2f}")
+# Creiamo il grafico a dispersione colorato per fase
+fig = px.scatter(
+    backtest_data, 
+    x=backtest_data.index, 
+    y='SP500', 
+    color='Fase_Macro',
+    color_discrete_map={
+        '1. Allarme Rosso (Recessione)': 'red',
+        '2. Ripresa (Accumulo)': 'orange',
+        '3. Espansione (Risk-On)': 'green'
+    },
+    title="S&P 500 Colorato per Fase Macro (Curva Rendimenti + Z-Score)"
+)
+fig.update_traces(marker=dict(size=4)) # Rimpiccioliamo i pallini per vederli meglio come linea
+st.plotly_chart(fig, use_container_width=True)
 
-    fig_z = px.line(z_score, title="Cicli di Rischio vs Paura")
-    st.plotly_chart(fig_z, use_container_width=True)
+st.caption("Nota metodologica: Questo backtest non include i costi di transazione e utilizza dati 'Point in time' sincronizzati. A scopo puramente educativo.")
