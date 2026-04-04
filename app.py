@@ -6,18 +6,17 @@ import plotly.graph_objects as go
 from fredapi import Fred
 import feedparser
 
-st.set_page_config(page_title="Macro Dashboard v13.2", layout="wide")
+st.set_page_config(page_title="Macro Dashboard v13.3", layout="wide")
 st.title("📊 Global Macro, Crypto & Geopolitics")
 
 with st.expander("📚 Legenda e Glossario"):
     st.markdown("""
     * **Z-Score:** Misura se un asset è in trend positivo (> 0) o negativo (< 0).
     * **Curva Rendimenti:** Se Invertita (< 0) segnala recessione. 
-    * **Mayer Multiple:** Prezzo diviso per la media a 200 giorni. < 1.0 = Sottocosto/Accumulo. > 2.4 = Bolla.
+    * **Mayer Multiple:** Prezzo diviso per la media a 200 giorni. < 1.0 = Accumulo. > 2.4 = Bolla.
     * **RSI:** > 70 è ipercomprato (rischio calo), < 30 è ipervenduto (possibile rimbalzo).
     """)
 
-# --- RECUPERO DATI MACRO E PREZZI ---
 @st.cache_data(ttl=3600)
 def load_all_data(api_key, lookback):
     assets = {
@@ -79,10 +78,7 @@ def get_vix():
 def analyze_geopolitics():
     url = "https://news.google.com/rss/search?q=geopolitics+OR+sanctions+OR+conflict+OR+economy+markets&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
-    
-    # Se Google News ci blocca temporaneamente, restituiamo valori di default
-    if not feed.entries:
-        return 50, []
+    if not feed.entries: return 50, []
         
     risk_words = ['war', 'strike', 'tariff', 'sanction', 'crisis', 'escalat', 'missile', 'tension', 'conflict', 'invasion']
     peace_words = ['peace', 'deal', 'agreement', 'ceasefire', 'easing', 'stimulus', 'talks']
@@ -94,7 +90,6 @@ def analyze_geopolitics():
         title = entry.title.lower()
         score = sum(1 for w in risk_words if w in title) - sum(1 for w in peace_words if w in title)
         risk_score_raw += score
-        
         if score != 0 and len(news_items) < 8:
             news_items.append({'titolo': entry.title, 'link': entry.link, 'score': score})
             
@@ -110,55 +105,9 @@ def get_crypto_news():
 
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
 
-# --- MOTORE DI CARICAMENTO RESILIENTE (ANTI-CRASH) ---
 df, vix_val = pd.DataFrame(), 20
 tension_index, top_news = 50, []
 crypto_news = []
 
-with st.spinner("📊 Scaricamento dati Macroeconomici e Finanziari..."):
+with st.spinner("📊 Scaricamento dati Macro..."):
     try:
-        df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
-        vix_val = get_vix()
-    except Exception as e:
-        st.error(f"Impossibile scaricare i dati di borsa in questo momento. Riprova più tardi. Dettaglio: {e}")
-        st.stop()
-
-with st.spinner("🌍 Analisi in corso delle Notizie Geopolitiche..."):
-    try:
-        tension_index, top_news = analyze_geopolitics()
-    except:
-        pass # Ignora l'errore per non bloccare l'app
-
-with st.spinner("⚡ Scansione delle Notizie Crypto..."):
-    try:
-        crypto_news = get_crypto_news()
-    except:
-        pass # Ignora l'errore
-
-if df.empty:
-    st.error("Dati insufficienti per avviare il cruscotto. Ricarica la pagina.")
-    st.stop()
-
-current = df.iloc[-1]
-
-# --- CREAZIONE SCHEDE ---
-tab1, tab2, tab3 = st.tabs(["🏛️ Macro & TradFi", "⚡ Ecosistema Crypto & News", "🌍 Geopolitica"])
-
-# ==========================================
-# SCHEDA 1: MACROECONOMIA
-# ==========================================
-with tab1:
-    st.header("🚦 Semaforo Macro e Azionario")
-    if current['Fase_Macro'] == '1. Allarme Rosso (Recessione)':
-        colore, titolo = "#d32f2f", "🚨 RALLENTAMENTO / RECESSIONE"
-        settori = "Healthcare (XLV), Utilities (XLU)"
-    elif current['Fase_Macro'] == '2. Ripresa (Accumulo)':
-        colore, titolo = "#f57c00", "🔋 RIPRESA ECONOMICA"
-        settori = "Tecnologia (XLK), Consumi (XLY)"
-    else:
-        colore, titolo = "#388e3c", "🚀 ESPANSIONE / RISK-ON"
-        settori = "Industriali (XLI), Finanziari (XLF)"
-
-    st.markdown(f"""
-    <div style="padding: 20px; border-radius: 10px; background-color: {colore}; color: white; margin-bottom: 20px;">
-        <h3 style="margin-top: 0; color: white;">{titolo}</h3>
