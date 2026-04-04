@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from fredapi import Fred
 import feedparser
 
-st.set_page_config(page_title="Macro Dashboard v13.5", layout="wide")
+st.set_page_config(page_title="Macro Dashboard v13.6", layout="wide")
 st.title("📊 Global Macro, Crypto & Geopolitics")
 
 with st.expander("📚 Legenda e Glossario"):
@@ -131,7 +131,6 @@ if df.empty:
 
 current = df.iloc[-1]
 
-# ECCO LA RIGA CHE ERA SALTATA: Ci sono 3 variabili (tab1, tab2, tab3) e 3 schede tra parentesi quadre!
 tab1, tab2, tab3 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto & News", "🌍 Geopolitica"])
 
 with tab1:
@@ -188,16 +187,22 @@ with tab2:
         st.info("Feed notizie in aggiornamento.")
 
 with tab3:
-    st.header("🌍 Geopolitical News Scanner")
+    st.header("🌍 Geopolitical News Scanner & Sector Rotation")
     col_g1, col_g2 = st.columns([1, 1])
     
     with col_g1:
         if tension_index < 40:
             st.success("🟢 **Stato: Distensione Globale**")
+            st.markdown("🕊️ **Strategia:** Clima pacifico che favorisce il commercio internazionale e le supply chain globali.")
+            st.markdown("🎯 **Settori da sovrappesare:**\n* **Mercati Emergenti (EEM):** Beneficiano del dollaro debole e della pace commerciale.\n* **Trasporti Globali (IYT):** Ripresa delle rotte commerciali navali e aeree.\n* **Consumi Discrezionali (XLY):** Maggiore propensione alla spesa.")
         elif tension_index <= 60:
             st.warning("🟡 **Stato: Tensione Normale**")
+            st.markdown("⚖️ **Strategia:** Normale rumore di fondo geopolitico. Nessun impatto drastico sui mercati atteso.")
+            st.markdown("🎯 **Settori da sovrappesare:**\n* Segui le indicazioni primarie del *Semaforo Macro* nella Scheda 1.\n* Mantieni un portafoglio bilanciato (es. Azionario Globale - VT).")
         else:
-            st.error("🔴 **Stato: Allarme Geopolitico**")
+            st.error("🔴 **Stato: Allarme Geopolitico (Risk-Off)**")
+            st.markdown("🛡️ **Strategia:** Rischio imminente di conflitti, sanzioni o rottura delle catene di approvvigionamento. Difendere il capitale.")
+            st.markdown("🎯 **Settori da sovrappesare:**\n* **Difesa e Aerospazio (ITA):** Espansione della spesa militare globale.\n* **Cybersecurity (CIBR):** Elevato rischio di guerre informatiche e hacking statali.\n* **Energia (XLE):** Rischio di shock petroliferi.\n* **Oro (GLD):** Bene rifugio per eccellenza contro l'incertezza dei governi.")
         
     with col_g2:
         fig_geo = go.Figure(go.Indicator(
