@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from fredapi import Fred
 import feedparser
 
-st.set_page_config(page_title="Macro Dashboard v13.4", layout="wide")
+st.set_page_config(page_title="Macro Dashboard v13.5", layout="wide")
 st.title("📊 Global Macro, Crypto & Geopolitics")
 
 with st.expander("📚 Legenda e Glossario"):
@@ -63,12 +63,9 @@ def load_all_data(api_key, lookback):
             
     df = df.dropna()
     def assegna_fase(row):
-        if row['YieldCurve'] < 0: 
-            return '1. Allarme Rosso (Recessione)'
-        elif row['YieldCurve'] > 0 and row['Z_S&P 500'] < 0: 
-            return '2. Ripresa (Accumulo)'
-        else: 
-            return '3. Espansione (Risk-On)'
+        if row['YieldCurve'] < 0: return '1. Allarme Rosso (Recessione)'
+        elif row['YieldCurve'] > 0 and row['Z_S&P 500'] < 0: return '2. Ripresa (Accumulo)'
+        else: return '3. Espansione (Risk-On)'
     df['Fase_Macro'] = df.apply(assegna_fase, axis=1)
     return df
 
@@ -81,8 +78,7 @@ def get_vix():
 def analyze_geopolitics():
     url = "https://news.google.com/rss/search?q=geopolitics+OR+sanctions+OR+conflict+OR+economy+markets&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
-    if not feed.entries: 
-        return 50, []
+    if not feed.entries: return 50, []
         
     risk_words = ['war', 'strike', 'tariff', 'sanction', 'crisis', 'escalat', 'missile', 'tension', 'conflict', 'invasion']
     peace_words = ['peace', 'deal', 'agreement', 'ceasefire', 'easing', 'stimulus', 'talks']
@@ -104,8 +100,7 @@ def analyze_geopolitics():
 def get_crypto_news():
     url = "https://news.google.com/rss/search?q=bitcoin+OR+ethereum+OR+cryptocurrency+OR+blockchain&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
-    if not feed.entries: 
-        return []
+    if not feed.entries: return []
     return [{'titolo': entry.title, 'link': entry.link} for entry in feed.entries[:8]]
 
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
@@ -123,16 +118,12 @@ with st.spinner("📊 Scaricamento dati Macro..."):
         st.stop()
 
 with st.spinner("🌍 Analisi News Geopolitiche..."):
-    try: 
-        tension_index, top_news = analyze_geopolitics()
-    except Exception: 
-        pass
+    try: tension_index, top_news = analyze_geopolitics()
+    except: pass
 
 with st.spinner("⚡ Scansione News Crypto..."):
-    try: 
-        crypto_news = get_crypto_news()
-    except Exception: 
-        pass
+    try: crypto_news = get_crypto_news()
+    except: pass
 
 if df.empty:
     st.error("Dati insufficienti. Ricarica la pagina.")
@@ -140,4 +131,88 @@ if df.empty:
 
 current = df.iloc[-1]
 
-tab1, tab2, tab3 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto & News"]),
+# ECCO LA RIGA CHE ERA SALTATA: Ci sono 3 variabili (tab1, tab2, tab3) e 3 schede tra parentesi quadre!
+tab1, tab2, tab3 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto & News", "🌍 Geopolitica"])
+
+with tab1:
+    st.header("🚦 Semaforo Macro e Azionario")
+    
+    if current['Fase_Macro'] == '1. Allarme Rosso (Recessione)':
+        st.error("🚨 **FASE ATTUALE: RALLENTAMENTO / RECESSIONE**\n\n**Settori suggeriti:** Healthcare (XLV), Utilities (XLU)")
+    elif current['Fase_Macro'] == '2. Ripresa (Accumulo)':
+        st.warning("🔋 **FASE ATTUALE: RIPRESA ECONOMICA**\n\n**Settori suggeriti:** Tecnologia (XLK), Consumi (XLY)")
+    else:
+        st.success("🚀 **FASE ATTUALE: ESPANSIONE / RISK-ON**\n\n**Settori suggeriti:** Industriali (XLI), Finanziari (XLF)")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("S&P 500", f"{current['Z_S&P 500']:.2f}")
+    c2.metric("Dollaro DXY", f"{current['Z_Dollaro DXY']:.2f}")
+    c3.metric("Oro", f"{current['Z_Oro']:.2f}")
+    c4.metric("Treasury 10Y", f"{current['Z_Treasury 10Y']:.2f}")
+
+with tab2:
+    st.header("👑 Bitcoin (BTC)")
+    mayer_btc = current['Mayer_BTC']
+    rsi_btc = current['RSI_BTC']
+    
+    if mayer_btc < 1.0:
+        st.success("🔋 **Fase del Ciclo BTC: Accumulo / Sottocosto**")
+    elif mayer_btc < 2.0:
+        st.warning("📈 **Fase del Ciclo BTC: Bull Market (Mid Cycle)**")
+    else:
+        st.error("💥 **Fase del Ciclo BTC: Bolla Speculativa (Pericolo)**")
+    
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    col_b1.metric("Prezzo BTC", f"${current['Bitcoin']:,.0f}")
+    col_b2.metric("Mayer Multiple", f"{mayer_btc:.2f}", delta="Bolla" if mayer_btc > 2.0 else "Accumulo" if mayer_btc < 1 else "Neutrale", delta_color="inverse" if mayer_btc > 2 else "normal")
+    col_b3.metric("RSI (14 gg)", f"{rsi_btc:.0f}", delta="Ipercomprato" if rsi_btc > 70 else "Ipervenduto" if rsi_btc < 30 else "Normale", delta_color="inverse" if rsi_btc > 70 else "normal")
+    col_b4.metric("Trend (Z-Score)", f"{current['Z_Bitcoin']:.2f}")
+
+    st.markdown("---")
+    st.header("💠 Ethereum (ETH)")
+    mayer_eth = current['Mayer_ETH']
+    rsi_eth = current['RSI_ETH']
+    
+    col_e1, col_e2, col_e3, col_e4 = st.columns(4)
+    col_e1.metric("Prezzo ETH", f"${current['Ethereum']:,.0f}")
+    col_e2.metric("Mayer Multiple", f"{mayer_eth:.2f}", delta="Bolla" if mayer_eth > 2.0 else "Sottocosto" if mayer_eth < 1 else "Normale", delta_color="inverse" if mayer_eth > 2 else "normal")
+    col_e3.metric("RSI (14 gg)", f"{rsi_eth:.0f}", delta="Ipercomprato" if rsi_eth > 70 else "Ipervenduto" if rsi_eth < 30 else "Normale", delta_color="inverse" if rsi_eth > 70 else "normal")
+    col_e4.metric("Trend (Z-Score)", f"{current['Z_Ethereum']:.2f}")
+
+    st.markdown("---")
+    st.header("📰 Crypto News Radar")
+    if crypto_news:
+        for item in crypto_news:
+            st.markdown(f"- ⚡ [{item['titolo']}]({item['link']})")
+    else:
+        st.info("Feed notizie in aggiornamento.")
+
+with tab3:
+    st.header("🌍 Geopolitical News Scanner")
+    col_g1, col_g2 = st.columns([1, 1])
+    
+    with col_g1:
+        if tension_index < 40:
+            st.success("🟢 **Stato: Distensione Globale**")
+        elif tension_index <= 60:
+            st.warning("🟡 **Stato: Tensione Normale**")
+        else:
+            st.error("🔴 **Stato: Allarme Geopolitico**")
+        
+    with col_g2:
+        fig_geo = go.Figure(go.Indicator(
+            mode="gauge+number", value=tension_index, title={'text': "Indice di Tensione"},
+            gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "black"},
+                   'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [40, 60], 'color': "#ffb74d"},
+                             {'range': [60, 100], 'color': "#e57373"}],
+                   'threshold': {'line': {'color': "red", 'width': 4}, 'value': tension_index}}))
+        fig_geo.update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig_geo, use_container_width=True)
+        
+    st.subheader("📰 Ultime Notizie Analizzate")
+    if top_news:
+        for item in top_news:
+            badge = "🔴 Tensione" if item['score'] > 0 else "🟢 Distensione" if item['score'] < 0 else "⚪ Neutrale"
+            st.markdown(f"- **[{badge}]** [{item['titolo']}]({item['link']})")
+    else:
+        st.info("Nessuna notizia ad alta priorità rilevata.")
