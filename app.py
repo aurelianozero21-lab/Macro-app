@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from fredapi import Fred
 import feedparser
 
-st.set_page_config(page_title="Macro Dashboard v13.6", layout="wide")
+st.set_page_config(page_title="Macro Dashboard v13.7", layout="wide")
 st.title("📊 Global Macro, Crypto & Geopolitics")
 
 with st.expander("📚 Legenda e Glossario"):
@@ -15,6 +15,7 @@ with st.expander("📚 Legenda e Glossario"):
     * **Curva Rendimenti:** Se Invertita (< 0) segnala recessione. 
     * **Mayer Multiple:** Prezzo diviso per la media a 200 giorni. < 1.0 = Accumulo. > 2.4 = Bolla.
     * **RSI:** > 70 è ipercomprato (rischio calo), < 30 è ipervenduto (possibile rimbalzo).
+    * **Rotazione Crypto:** Il flusso di capitali da Bitcoin -> Ethereum -> Altcoin -> Memecoin.
     """)
 
 @st.cache_data(ttl=3600)
@@ -150,16 +151,25 @@ with tab1:
     c4.metric("Treasury 10Y", f"{current['Z_Treasury 10Y']:.2f}")
 
 with tab2:
-    st.header("👑 Bitcoin (BTC)")
+    st.header("👑 Bitcoin (BTC) & Ecosistema")
     mayer_btc = current['Mayer_BTC']
     rsi_btc = current['RSI_BTC']
     
+    # --- NUOVA SEZIONE: ROTAZIONE SETTORIALE CRYPTO ---
     if mayer_btc < 1.0:
-        st.success("🔋 **Fase del Ciclo BTC: Accumulo / Sottocosto**")
+        st.success("🔋 **Fase del Ciclo: Accumulo (Bear / Early Bull)**")
+        st.markdown("🛡️ **Strategia Crypto:** Il mercato è spaventato o annoiato. La liquidità scarseggia. Le Altcoin in questa fase sanguinano contro Bitcoin.")
+        st.markdown("🎯 **Cosa Sovrappesare:**\n* **Bitcoin (BTC) al 70-80%:** L'asset più sicuro per costruire il portafoglio base.\n* **Ethereum (ETH) al 20%:** Iniziare l'accumulo.\n* ❌ **Evitare le Memecoin e le micro-cap.**")
     elif mayer_btc < 2.0:
-        st.warning("📈 **Fase del Ciclo BTC: Bull Market (Mid Cycle)**")
+        st.warning("📈 **Fase del Ciclo: Bull Market (Mid Cycle)**")
+        st.markdown("🌊 **Strategia Crypto:** Bitcoin ha già corso e la sua dominance inizia a scendere. I profitti di BTC ruotano verso i progetti con fondamentali solidi.")
+        st.markdown("🎯 **Cosa Sovrappesare:**\n* **Ecosistema Ethereum (Layer 2 come Arbitrum, Optimism).**\n* **Layer 1 alternativi (Solana, Avalanche).**\n* **Protocolli DeFi storici (Aave, Uniswap).**")
     else:
-        st.error("💥 **Fase del Ciclo BTC: Bolla Speculativa (Pericolo)**")
+        st.error("💥 **Fase del Ciclo: Bolla Speculativa (Euphoria)**")
+        st.markdown("🎢 **Strategia Crypto:** Pura mania. Il barbiere ti chiede che crypto comprare. Rischio di crollo imminente altissimo.")
+        st.markdown("🎯 **Cosa Sovrappesare:**\n* 💰 **Stablecoins (USDT, USDC):** Iniziare a vendere progressivamente BTC e Altcoin per mettere al sicuro i profitti in dollari digitali.\n* *In questa fase le Memecoin fanno i +1000%, ma è puramente azzardo.*")
+
+    st.markdown("---")
     
     col_b1, col_b2, col_b3, col_b4 = st.columns(4)
     col_b1.metric("Prezzo BTC", f"${current['Bitcoin']:,.0f}")
@@ -194,15 +204,15 @@ with tab3:
         if tension_index < 40:
             st.success("🟢 **Stato: Distensione Globale**")
             st.markdown("🕊️ **Strategia:** Clima pacifico che favorisce il commercio internazionale e le supply chain globali.")
-            st.markdown("🎯 **Settori da sovrappesare:**\n* **Mercati Emergenti (EEM):** Beneficiano del dollaro debole e della pace commerciale.\n* **Trasporti Globali (IYT):** Ripresa delle rotte commerciali navali e aeree.\n* **Consumi Discrezionali (XLY):** Maggiore propensione alla spesa.")
+            st.markdown("🎯 **Settori da sovrappesare:**\n* **Mercati Emergenti (EEM)**\n* **Trasporti Globali (IYT)**\n* **Consumi Discrezionali (XLY)**")
         elif tension_index <= 60:
             st.warning("🟡 **Stato: Tensione Normale**")
             st.markdown("⚖️ **Strategia:** Normale rumore di fondo geopolitico. Nessun impatto drastico sui mercati atteso.")
-            st.markdown("🎯 **Settori da sovrappesare:**\n* Segui le indicazioni primarie del *Semaforo Macro* nella Scheda 1.\n* Mantieni un portafoglio bilanciato (es. Azionario Globale - VT).")
+            st.markdown("🎯 **Settori da sovrappesare:**\n* Segui le indicazioni primarie del *Semaforo Macro* nella Scheda 1.")
         else:
             st.error("🔴 **Stato: Allarme Geopolitico (Risk-Off)**")
             st.markdown("🛡️ **Strategia:** Rischio imminente di conflitti, sanzioni o rottura delle catene di approvvigionamento. Difendere il capitale.")
-            st.markdown("🎯 **Settori da sovrappesare:**\n* **Difesa e Aerospazio (ITA):** Espansione della spesa militare globale.\n* **Cybersecurity (CIBR):** Elevato rischio di guerre informatiche e hacking statali.\n* **Energia (XLE):** Rischio di shock petroliferi.\n* **Oro (GLD):** Bene rifugio per eccellenza contro l'incertezza dei governi.")
+            st.markdown("🎯 **Settori da sovrappesare:**\n* **Difesa e Aerospazio (ITA)**\n* **Cybersecurity (CIBR)**\n* **Energia (XLE)**\n* **Oro (GLD)**")
         
     with col_g2:
         fig_geo = go.Figure(go.Indicator(
