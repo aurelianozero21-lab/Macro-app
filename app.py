@@ -51,7 +51,8 @@ def load_and_backtest(api_key, lookback):
             return '3. Espansione (Risk-On)'
             
     df['Fase_Macro'] = df.apply(assegna_fase, axis=1)
-    return df, assets.keys()
+    # ECCO LA CORREZIONE QUI SOTTO: trasformiamo in lista standard
+    return df, list(assets.keys())
 
 lookback = st.sidebar.slider("Giorni per Media Mobile (Z-Score)", 30, 200, 90)
 
@@ -85,7 +86,6 @@ st.markdown("---")
 st.header("🌡️ Termometro Multi-Asset (Z-Score Attuale)")
 st.write("Valori > 0 indicano forza rispetto alla media, valori < 0 indicano debolezza a breve termine.")
 
-# Creiamo due righe di metriche per non affollare lo schermo
 col1, col2, col3 = st.columns(3)
 col4, col5, col6 = st.columns(3)
 
@@ -94,7 +94,6 @@ for i, asset in enumerate(asset_names):
     z_val = current_status[f'Z_{asset}']
     cols[i].metric(asset, f"{z_val:.2f}")
 
-# Grafico storico degli Z-Score per tutti gli asset
 st.subheader("Analisi Intermarket: Rotazione degli Asset (Ultimo Anno)")
 z_columns = [f'Z_{asset}' for asset in asset_names]
 fig_z = px.line(backtest_data.tail(252), y=z_columns, title="Confronto della forza relativa tra le varie Asset Class")
