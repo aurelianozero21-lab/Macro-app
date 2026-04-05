@@ -272,7 +272,7 @@ with tab4:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             
             # Usiamo il modello di ultima generazione standard e attivo
-            model = genai.GenerativeModel('gemini-1.5-flash')
+     model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ai_context)
             
             if "chat_history" not in st.session_state: 
                 st.session_state.chat_history = []
