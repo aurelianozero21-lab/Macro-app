@@ -5,9 +5,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from fredapi import Fred
 import feedparser
+import google.generativeai as genai
 
-st.set_page_config(page_title="Macro Dashboard v13.8", layout="wide")
-st.title("📊 Global Macro, Crypto & AI Assistant")
+st.set_page_config(page_title="Macro Dashboard v15.0", layout="wide")
+st.title("📊 Global Macro, Crypto & Real AI Assistant")
 
 with st.expander("📚 Legenda e Glossario"):
     st.markdown("""
@@ -17,7 +18,6 @@ with st.expander("📚 Legenda e Glossario"):
     * **RSI:** > 70 è ipercomprato (rischio calo), < 30 è ipervenduto (possibile rimbalzo).
     """)
 
-# --- RECUPERO DATI MACRO E PREZZI ---
 @st.cache_data(ttl=3600)
 def load_all_data(api_key, lookback):
     assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX'}
@@ -31,24 +31,12 @@ def load_all_data(api_key, lookback):
     btc_hist = yf.Ticker('BTC-USD').history(period="15y")
     btc_hist.index = pd.to_datetime(btc_hist.index).tz_localize(None).normalize()
     df['Bitcoin'] = btc_hist['Close']
-    df['BTC_Volume'] = btc_hist['Volume']
     df['BTC_200DMA'] = df['Bitcoin'].rolling(window=200).mean()
     df['Mayer_BTC'] = df['Bitcoin'] / df['BTC_200DMA']
-    df['BTC_Vol_30D'] = df['BTC_Volume'].rolling(window=30).mean()
     
     delta_btc = df['Bitcoin'].diff()
     rs_btc = (delta_btc.where(delta_btc > 0, 0)).rolling(window=14).mean() / (-delta_btc.where(delta_btc < 0, 0)).rolling(window=14).mean()
     df['RSI_BTC'] = 100 - (100 / (1 + rs_btc))
-
-    eth_hist = yf.Ticker('ETH-USD').history(period="15y")
-    eth_hist.index = pd.to_datetime(eth_hist.index).tz_localize(None).normalize()
-    df['Ethereum'] = eth_hist['Close']
-    df['ETH_200DMA'] = df['Ethereum'].rolling(window=200).mean()
-    df['Mayer_ETH'] = df['Ethereum'] / df['ETH_200DMA']
-    
-    delta_eth = df['Ethereum'].diff()
-    rs_eth = (delta_eth.where(delta_eth > 0, 0)).rolling(window=14).mean() / (-delta_eth.where(delta_eth < 0, 0)).rolling(window=14).mean()
-    df['RSI_ETH'] = 100 - (100 / (1 + rs_eth))
     
     fred = Fred(api_key=api_key)
     yc = fred.get_series('T10Y2Y')
@@ -56,7 +44,7 @@ def load_all_data(api_key, lookback):
     df['YieldCurve'] = yc
     df = df.ffill().dropna()
     
-    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'Ethereum']:
+    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin']:
         df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
@@ -88,43 +76,45 @@ lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
 df = pd.DataFrame()
 tension_index, top_news = 50, []
 
-with st.spinner("📊 Sincronizzazione Dati..."):
+with st.spinner("📊 Sincronizzazione Dati in corso..."):
     try:
         df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
         tension_index, top_news = analyze_geopolitics()
     except Exception as e:
-        st.error("Errore nel caricamento dei dati.")
+        st.error("Errore nel caricamento dei dati base.")
         st.stop()
 
 current = df.iloc[-1]
 
-# --- MOTORE MACRO POTENZIATO (Incrocia Curva, S&P 500 e Geopolitica) ---
 def calcola_fase_avanzata(yc, z_sp500, tension):
-    if yc < 0 or tension >= 65:
-        return '1. Allarme Rosso (Risk-Off)'
-    elif yc > 0 and (z_sp500 < 0 or tension >= 50):
-        return '2. Incertezza / Accumulo Difensivo'
-    else:
-        return '3. Espansione (Risk-On)'
+    if yc < 0 or tension >= 65: return '1. Allarme Rosso (Risk-Off)'
+    elif yc > 0 and (z_sp500 < 0 or tension >= 50): return '2. Incertezza / Accumulo Difensivo'
+    else: return '3. Espansione (Risk-On)'
 
 fase_attuale = calcola_fase_avanzata(current['YieldCurve'], current['Z_S&P 500'], tension_index)
 
-# --- CREAZIONE SCHEDE ---
-tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto", "🌍 Geopolitica", "🤖 AI Chatbot"])
+# CONTESTO PER L'AI (Iniettiamo i dati live nel prompt di sistema)
+ai_context = f"""
+Sei un analista quantitativo esperto. Rispondi alle domande in modo conciso e professionale.
+Attualmente i dati della dashboard sono:
+- Fase Macro Economica: {fase_attuale}
+- S&P 500 Z-Score: {current['Z_S&P 500']:.2f}
+- Indice Geopolitico (0-100, >60 è rischio): {tension_index}
+- Prezzo Bitcoin: ${current['Bitcoin']:.0f}
+- Bitcoin Mayer Multiple (<1 accumulo, >2 bolla): {current['Mayer_BTC']:.2f}
+Usa questi dati per contestualizzare le tue risposte se l'utente ti chiede consigli di mercato.
+"""
 
-# ==========================================
-# SCHEDA 1: MACROECONOMIA
-# ==========================================
+tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto", "🌍 Geopolitica", "🤖 AI Quant Assistant"])
+
 with tab1:
     st.header("🚦 Semaforo Macro Intelligente")
-    st.write("Il motore decisionale ora incrocia i dati finanziari con l'indice di tensione globale per evitare falsi segnali di ottimismo.")
-    
     if "1." in fase_attuale:
-        st.error(f"🚨 **FASE ATTUALE: {fase_attuale}**\n\nCurva invertita o forte rischio geopolitico. **Settori:** Difesa, Oro, Dollaro USA, Utilities.")
+        st.error(f"🚨 **FASE ATTUALE: {fase_attuale}**\n\n**Settori:** Difesa, Oro, Dollaro USA, Utilities.")
     elif "2." in fase_attuale:
-        st.warning(f"⚖️ **FASE ATTUALE: {fase_attuale}**\n\nMercato debole o moderata tensione. Falso segnale di ripresa possibile. **Settori:** Consumi di base, Cash, accumulo cauto su Tech.")
+        st.warning(f"⚖️ **FASE ATTUALE: {fase_attuale}**\n\n**Settori:** Consumi di base, Cash, Tech.")
     else:
-        st.success(f"🚀 **FASE ATTUALE: {fase_attuale}**\n\nClima disteso e trend rialzista solido. **Settori:** Industriali, Finanza, Rischio.")
+        st.success(f"🚀 **FASE ATTUALE: {fase_attuale}**\n\n**Settori:** Industriali, Finanza, Rischio.")
     
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("S&P 500 Z-Score", f"{current['Z_S&P 500']:.2f}")
@@ -132,87 +122,62 @@ with tab1:
     c3.metric("Oro", f"{current['Z_Oro']:.2f}")
     c4.metric("Treasury 10Y", f"{current['Z_Treasury 10Y']:.2f}")
 
-# ==========================================
-# SCHEDA 2: CRYPTO
-# ==========================================
 with tab2:
-    st.header("👑 Bitcoin (BTC) & Rotazione Crypto")
+    st.header("👑 Bitcoin (BTC)")
     mayer_btc = current['Mayer_BTC']
-    
-    if mayer_btc < 1.0:
-        st.success("🔋 **Fase del Ciclo BTC: Accumulo (Bear / Early Bull)**\n\nSolo BTC ed ETH. Evita Memecoin.")
-    elif mayer_btc < 2.0:
-        st.warning("📈 **Fase del Ciclo BTC: Bull Market (Mid Cycle)**\n\nRotazione verso Layer 1 (Solana, ecc.) e DeFi.")
-    else:
-        st.error("💥 **Fase del Ciclo BTC: Bolla Speculativa (Euphoria)**\n\nRischio fortissimo. Accumula Stablecoin (USDT/USDC).")
+    if mayer_btc < 1.0: st.success("🔋 **Fase del Ciclo BTC: Accumulo (Bear / Early Bull)**")
+    elif mayer_btc < 2.0: st.warning("📈 **Fase del Ciclo BTC: Bull Market (Mid Cycle)**")
+    else: st.error("💥 **Fase del Ciclo BTC: Bolla Speculativa (Euphoria)**")
 
     col_b1, col_b2, col_b3 = st.columns(3)
     col_b1.metric("Prezzo BTC", f"${current['Bitcoin']:,.0f}")
     col_b2.metric("Mayer Multiple", f"{mayer_btc:.2f}")
     col_b3.metric("RSI (14 gg)", f"{current['RSI_BTC']:.0f}")
 
-# ==========================================
-# SCHEDA 3: GEOPOLITICA
-# ==========================================
 with tab3:
     st.header("🌍 Geopolitical News Scanner")
     col_g1, col_g2 = st.columns([1, 1])
-    
     with col_g1:
-        if tension_index < 40:
-            st.success("🟢 **Stato: Distensione Globale**")
-        elif tension_index <= 60:
-            st.warning("🟡 **Stato: Tensione Normale**")
-        else:
-            st.error("🔴 **Stato: Allarme Geopolitico (Risk-Off)**")
-        
+        if tension_index < 40: st.success("🟢 **Stato: Distensione Globale**")
+        elif tension_index <= 60: st.warning("🟡 **Stato: Tensione Normale**")
+        else: st.error("🔴 **Stato: Allarme Geopolitico (Risk-Off)**")
     with col_g2:
-        fig_geo = go.Figure(go.Indicator(
-            mode="gauge+number", value=tension_index, title={'text': "Indice di Tensione"},
-            gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "black"},
-                   'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [40, 60], 'color': "#ffb74d"},
-                             {'range': [60, 100], 'color': "#e57373"}],
-                   'threshold': {'line': {'color': "red", 'width': 4}, 'value': tension_index}}))
+        fig_geo = go.Figure(go.Indicator(mode="gauge+number", value=tension_index, title={'text': "Indice di Tensione"},
+            gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [40, 60], 'color': "#ffb74d"}, {'range': [60, 100], 'color': "#e57373"}]}))
         fig_geo.update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_geo, use_container_width=True)
 
-# ==========================================
-# SCHEDA 4: AI CHATBOT (NUOVA)
-# ==========================================
 with tab4:
-    st.header("🤖 Assistente Macroeconomico Base")
-    st.write("Questo è un simulatore di chatbot integrato. Poni domande su inflazione, bitcoin o tassi di interesse.")
+    st.header("🤖 Quant AI Assistant (Powered by Gemini)")
+    st.write("Analizza i dati in tempo reale del cruscotto e ti risponde come un analista professionista.")
     
-    # Inizializziamo la memoria della chat nella sessione
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.warning("⚠️ Manca la GEMINI_API_KEY nei Secrets di Streamlit! Inseriscila per usare la chat.")
+    else:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=ai_context)
 
-    # Mostriamo i messaggi precedenti
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
-    # Input dell'utente
-    if prompt := st.chat_input("Chiedimi cosa significa un indicatore o una definizione..."):
-        # Aggiungiamo il messaggio dell'utente alla chat
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-        # Logica di risposta simulata (basata su parole chiave)
-        prompt_lower = prompt.lower()
-        if "inflazione" in prompt_lower:
-            risposta = "L'inflazione è l'aumento generalizzato dei prezzi. Quando è alta, le Banche Centrali alzano i tassi di interesse per raffreddare l'economia, il che di solito fa scendere i mercati azionari."
-        elif "bitcoin" in prompt_lower or "crypto" in prompt_lower:
-            risposta = "Bitcoin è guidato dall'adozione, dalla liquidità globale (M2) e dai cicli di Halving ogni 4 anni. Non produce utili, quindi il suo prezzo dipende puramente dalla domanda e dall'offerta sul mercato."
-        elif "tassi" in prompt_lower or "rendimenti" in prompt_lower:
-            risposta = "I tassi di interesse sono il costo del denaro. Tassi alti rendono i Titoli di Stato attraenti, togliendo capitali dalle azioni (Risk-Off). Tassi bassi spingono i capitali verso azioni e crypto per cercare rendimento (Risk-On)."
-        elif "z-score" in prompt_lower:
-            risposta = "Lo Z-Score misura la deviazione di un prezzo dalla sua media storica recente. Valori molto alti indicano ipercomprato (possibile correzione), valori molto negativi indicano ipervenduto (possibile rimbalzo)."
-        else:
-            risposta = "Sono un assistente in versione 'simulata' con regole di base. Per farmi ragionare su analisi complesse, puoi collegarmi a un'API di Intelligenza Artificiale come Gemini o OpenAI nelle versioni successive!"
+        if prompt := st.chat_input("Chiedimi un parere sull'allocazione attuale del portafoglio..."):
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-        # Mostriamo e salviamo la risposta
-        with st.chat_message("assistant"):
-            st.markdown(risposta)
-        st.session_state.messages.append({"role": "assistant", "content": risposta})
+            with st.spinner("L'AI sta analizzando i mercati..."):
+                try:
+                    # Inviamo lo storico per mantenere il contesto della conversazione
+                    formatted_history = [{"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]} for m in st.session_state.chat_history[:-1]]
+                    chat = model.start_chat(history=formatted_history)
+                    response = chat.send_message(prompt)
+                    
+                    with st.chat_message("assistant"):
+                        st.markdown(response.text)
+                    st.session_state.chat_history.append({"role": "assistant", "content": response.text})
+                except Exception as e:
+                    st.error(f"Errore API: {e}")
