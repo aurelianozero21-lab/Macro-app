@@ -9,6 +9,7 @@ import google.generativeai as genai
 from io import BytesIO
 import urllib.request
 import json
+import requests
 from datetime import datetime
 
 st.set_page_config(page_title="Macro Dashboard Pro", layout="wide")
@@ -20,13 +21,12 @@ with st.expander("📚 Legenda e Glossario Rapido"):
     * **Curva Rendimenti:** Se Invertita (< 0) segnala recessione. 
     * **Mayer Multiple:** Prezzo BTC diviso per la media a 200 giorni. < 1.0 = Accumulo. > 2.4 = Bolla.
     * **Crypto Fear & Greed:** Misura il sentiment crypto da 0 (Panico) a 100 (Euforia).
-    * **Smart Money (HYG):** Gli High Yield Bonds. Se scendono mentre la borsa sale, i grandi capitali stanno fuggendo dal rischio (Divergenza).
+    * **Smart Money (HYG):** Gli High Yield Bonds. Se scendono mentre la borsa sale, i grandi capitali fuggono dal rischio.
     """)
 
 # --- MOTORI DI CALCOLO ---
 @st.cache_data(ttl=3600)
 def load_all_data(api_key, lookback):
-    # Aggiunto HYG e VIX per lo Smart Money Radar
     assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX', 'High Yield': 'HYG', 'VIX': '^VIX'}
     df = pd.DataFrame()
     for name, ticker in assets.items():
@@ -179,6 +179,43 @@ if st.session_state.morning_brief:
         st.markdown(st.session_state.morning_brief)
         st.download_button("💾 Scarica (.md)", data=st.session_state.morning_brief, file_name=f"Brief_{datetime.now().strftime('%Y%m%d')}.md")
 
+# --- NUOVO MODULO SIDEBAR: TELEGRAM ALERTS ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔔 Sistema di Alerting")
+
+allerte_attive = []
+if "1." in fase_attuale: allerte_attive.append("🚨 *MACRO:* FASE 1 - Allarme Rosso (Risk-Off).")
+if current['VIX'] > 25: allerte_attive.append(f"😱 *VIX:* Alta volatilità rilevata ({current['VIX']:.1f}).")
+if current['Z_S&P 500'] > 0 and current['Z_High Yield'] < 0: allerte_attive.append("⚠️ *SMART MONEY:* Divergenza ribassista su High Yield.")
+if fgi_val <= 25: allerte_attive.append(f"❄️ *CRYPTO:* Paura Estrema ({fgi_val}/100).")
+
+if not allerte_attive:
+    st.sidebar.success("✅ Nessuna anomalia critica di mercato rilevata.")
+else:
+    for al in allerte_attive:
+        st.sidebar.error(al.replace("*", "")) # Rimuove markdown per l'interfaccia UI
+        
+    with st.sidebar.expander("📲 Invia Alert su Telegram"):
+        st.write("Configura il tuo Bot per ricevere questi alert sul telefono.")
+        # Se presenti in secrets, li usa, altrimenti lascia vuoto
+        tg_token = st.text_input("Bot Token", value=st.secrets.get("TG_TOKEN", ""), type="password")
+        tg_chat = st.text_input("Chat ID", value=st.secrets.get("TG_CHAT", ""))
+        
+        if st.button("Invia Alert Ora"):
+            if tg_token and tg_chat:
+                messaggio = f"📊 *Macro Dashboard - Alert Report*\n{datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n" + "\n".join(allerte_attive)
+                url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
+                try:
+                    res = requests.post(url, json={"chat_id": tg_chat, "text": messaggio, "parse_mode": "Markdown"})
+                    if res.status_code == 200:
+                        st.success("✅ Messaggio inviato con successo!")
+                    else:
+                        st.error("❌ Errore nell'invio. Controlla Token e Chat ID.")
+                except Exception as e:
+                    st.error(f"Errore di rete: {e}")
+            else:
+                st.warning("Inserisci il Bot Token e il Chat ID.")
+
 # --- SCHEDE ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro", "⚡ Crypto", "🌍 Geopolitica", "🔥 Stress Test", "🤖 AI Chatbot", "📚 Academy"])
 
@@ -190,8 +227,6 @@ with tab1:
     else: st.success(f"🚀 **FASE ATTUALE: {fase_attuale}**")
     
     st.markdown("---")
-    
-    # NUOVO MODULO: SMART MONEY RADAR
     st.header("👁️ Smart Money Radar (Mercato Istituzionale)")
     st.write("Analisi delle divergenze tra il mercato Retail (Azioni) e i flussi Istituzionali (Credito e Volatilità).")
     
@@ -199,20 +234,17 @@ with tab1:
     with col_sm1:
         st.subheader("🏦 Rischio di Credito (HYG)")
         if current['Z_S&P 500'] > 0 and current['Z_High Yield'] < 0:
-            st.error("⚠️ **DIVERGENZA RIBASSISTA (WARNING)**\n\nL'S&P 500 sale, ma le obbligazioni spazzatura (HYG) scendono. I grandi fondi stanno vendendo rischio di nascosto.")
+            st.error("⚠️ **DIVERGENZA RIBASSISTA (WARNING)**\n\nL'S&P 500 sale, ma le obbligazioni spazzatura scendono. I grandi fondi stanno vendendo rischio di nascosto.")
         elif current['Z_S&P 500'] < 0 and current['Z_High Yield'] > 0:
-            st.success("🟢 **DIVERGENZA RIALZISTA**\n\nL'S&P 500 scende, ma lo Smart Money sta comprando credito. Possibile rimbalzo azionario in arrivo.")
+            st.success("🟢 **DIVERGENZA RIALZISTA**\n\nL'S&P 500 scende, ma lo Smart Money sta comprando credito. Possibile rimbalzo in arrivo.")
         else:
-            st.info("⚖️ **CONVERGENZA (Trend Sano)**\n\nIl mercato azionario e il mercato del credito si stanno muovendo nella stessa direzione. Nessun segnale occulto.")
+            st.info("⚖️ **CONVERGENZA (Trend Sano)**\n\nMercato azionario e credito si muovono insieme. Nessun segnale occulto.")
             
     with col_sm2:
         st.subheader("📉 Indice della Paura (VIX)")
-        if current['VIX'] < 15:
-            st.warning(f"😴 **Compiacenza Estrema ({current['VIX']:.1f})**\n\nIl mercato è fin troppo tranquillo. Rischio di correzioni improvvise elevato.")
-        elif current['VIX'] > 25:
-            st.error(f"😱 **Panico e Alta Volatilità ({current['VIX']:.1f})**\n\nIl mercato sta prezzando eventi critici. Ottimo momento per entrate strategiche se il panico rientra.")
-        else:
-            st.success(f"✅ **Volatilità Normale ({current['VIX']:.1f})**\n\nIl mercato scambia senza particolari stress sistemici.")
+        if current['VIX'] < 15: st.warning(f"😴 **Compiacenza Estrema ({current['VIX']:.1f})**\n\nMercato fin troppo tranquillo. Rischio di correzioni improvvise.")
+        elif current['VIX'] > 25: st.error(f"😱 **Panico e Alta Volatilità ({current['VIX']:.1f})**\n\nIl mercato sta prezzando eventi critici. Entrate strategiche se il panico rientra.")
+        else: st.success(f"✅ **Volatilità Normale ({current['VIX']:.1f})**\n\nNessuno stress sistemico rilevato.")
 
     st.markdown("---")
 
@@ -291,8 +323,7 @@ with tab4:
     with col_p4: alloc_difesa = st.number_input("Oro / Cash (%)", min_value=0, max_value=100, value=20)
     
     totale = alloc_azioni + alloc_obbligazioni + alloc_crypto + alloc_difesa
-    if totale != 100:
-        st.warning(f"⚠️ Il totale fa {totale}%. Fai quadrare a 100% per un'analisi perfetta.")
+    if totale != 100: st.warning(f"⚠️ Il totale fa {totale}%. Fai quadrare a 100% per un'analisi perfetta.")
     
     if st.button("🚀 Esegui Stress Test con AI", use_container_width=True):
         if "GEMINI_API_KEY" in st.secrets:
@@ -303,24 +334,12 @@ with tab4:
                     mod = next((m for m in modelli if "flash" in m.lower() or "pro" in m.lower()), modelli[0])
                     model = genai.GenerativeModel(mod)
                     
-                    prompt_stress = f"""
-                    Sei un Risk Manager istituzionale. Il portafoglio dell'utente è:
-                    {alloc_azioni}% Azioni, {alloc_obbligazioni}% Obbligazioni, {alloc_crypto}% Criptovalute, {alloc_difesa}% Oro/Cash.
-                    Il contesto macro di OGGI è: {ai_context}.
-                    
-                    Scrivi un report di Stress Test in Markdown. Struttura:
-                    ### 🎯 Valutazione del Rischio
-                    ### ⏱️ Breve Termine (1-3 mesi)
-                    ### 📅 Medio Termine (6-12 mesi)
-                    ### 🔭 Lungo Termine (1-3 anni)
-                    ### 💡 Azioni di Ottimizzazione
-                    """
+                    prompt_stress = f"""Sei un Risk Manager istituzionale. Portafoglio: {alloc_azioni}% Azioni, {alloc_obbligazioni}% Bond, {alloc_crypto}% Crypto, {alloc_difesa}% Oro/Cash. Macro OGGI: {ai_context}. Scrivi un report di Stress Test in Markdown (Valutazione Rischio, Breve, Medio, Lungo termine, Ottimizzazione)."""
                     risposta_stress = model.generate_content(prompt_stress).text
                     st.markdown("---")
                     st.markdown(risposta_stress)
                 except Exception as e: st.error(f"Errore: {e}")
-        else:
-            st.error("Inserisci la GEMINI_API_KEY nei secrets.")
+        else: st.error("Inserisci la GEMINI_API_KEY nei secrets.")
 
 # ----------------- SCHEDA 5 (AI Chatbot) -----------------
 with tab5:
