@@ -186,7 +186,7 @@ st.sidebar.subheader("🔔 Strategia Quotidiana su Telegram")
 with st.sidebar.expander("📲 Configura Ricezione"):
     st.markdown("Imposta per ricevere la strategia d'investimento sul tuo smartphone.")
     bot_url = st.secrets.get("TG_BOT_URL", "https://t.me/Inserisci_Qui_Il_Tuo_Bot")
-    st.markdown(f"1. Apri il nostro Bot Ufficiale cliccando [👉 QUI]({bot_url}) e premi **Avvia**.")
+    st.markdown(f"1. Apri il [Bot 👉 QUI]({bot_url}) e premi **Avvia**.")
     st.markdown("2. Clicca [👉 QUI](https://t.me/getmyid_bot) per ottenere il tuo codice ID.")
     tg_chat = st.text_input("3. Incolla il tuo ID qui:")
 
@@ -380,5 +380,3 @@ with tab6:
     with st.expander("🏛️ 3. Curva dei Rendimenti"): st.markdown("Se i tassi a breve termine superano quelli a lungo termine, c'è panico nel presente. Segnala quasi sempre una **Recessione** in arrivo.")
     with st.expander("💱 4. Dollaro e Oro"): st.markdown("Il **Dollaro (DXY)** è il bene rifugio. Se c'è panico, sale e le Azioni scendono. L'**Oro** protegge da svalutazione e disastri geopolitici.")
     with st.expander("👁️ 5. Smart Money e Divergenze"): st.markdown("I piccoli investitori (retail) guardano i prezzi. I grandi fondi (Smart Money) guardano il mercato del Credito (Obbligazioni Corporate / HYG). Se le azioni salgono ma l'HYG scende, significa che le banche stanno segretamente vendendo rischio.")
-``` Chiedimi di modificare o eliminare la tua azione programmata in qualsiasi momento. Quando la tua azione programmata è pronta, un punto comparirà accanto a questa chat in Recenti.
-http://googleusercontent.com/task_confirmation_content/0
