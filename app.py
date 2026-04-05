@@ -145,7 +145,7 @@ def calcola_fase_avanzata(yc, z_sp500, tension):
 fase_attuale = calcola_fase_avanzata(current['YieldCurve'], current['Z_S&P 500'], tension_index)
 ai_context = f"Dati live - Fase: {fase_attuale}, S&P500 Z:{current['Z_S&P 500']:.2f}, Oro Z:{current['Z_Oro']:.2f}, Geopolitica:{tension_index}/100, BTC:${current['Bitcoin']:.0f}, BTC Mayer:{current['Mayer_BTC']:.2f}, Crypto FGI: {fgi_val}/100."
 
-# --- SIDEBAR: EXPORT E MORNING BRIEF (NUOVO!) ---
+# --- SIDEBAR: EXPORT E MORNING BRIEF ---
 st.sidebar.markdown("---")
 def to_excel(df):
     output = BytesIO()
@@ -154,62 +154,33 @@ def to_excel(df):
     writer.close()
     return output.getvalue()
 
-st.sidebar.download_button("📥 Scarica Database in Excel", data=to_excel(df), file_name="macro_data.xlsx", mime="application/vnd.ms-excel")
-
+st.sidebar.download_button("📥 Scarica Database Excel", data=to_excel(df), file_name="macro_data.xlsx", mime="application/vnd.ms-excel")
 st.sidebar.markdown("---")
 st.sidebar.subheader("🗞️ Morning Briefing AI")
-st.sidebar.write("Genera un report esecutivo sui mercati di oggi.")
 
-if "morning_brief" not in st.session_state:
-    st.session_state.morning_brief = ""
-
+if "morning_brief" not in st.session_state: st.session_state.morning_brief = ""
 if st.sidebar.button("🤖 Genera Report"):
     if "GEMINI_API_KEY" in st.secrets:
-        with st.sidebar.status("✍️ Stesura report in corso..."):
+        with st.sidebar.status("✍️ Stesura report..."):
             try:
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                modelli_disponibili = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                target_model = next((m for m in modelli_disponibili if "flash" in m.lower() or "pro" in m.lower()), modelli_disponibili[0])
-                
-                model = genai.GenerativeModel(target_model)
-                prompt_report = f"""
-                Sei il Chief Investment Officer (CIO) di un fondo hedge quantitativo.
-                Scrivi il tuo "Morning Brief" giornaliero per i clienti. Oggi è il {datetime.now().strftime("%d/%m/%Y")}.
-                Basati RIGOROSAMENTE su questi dati attuali estratti dal cruscotto: {ai_context}.
-                
-                Struttura il report in Markdown così:
-                # 📊 Morning Briefing Quantitativo
-                **Sintesi Esecutiva:** (Riassunto netto di 3 righe)
-                ### 🏛️ Macro e Azionario
-                (Analisi su fase attuale, S&P 500 e Oro)
-                ### ⚡ Crypto Ecosystem
-                (Analisi su Bitcoin, Mayer Multiple e Sentiment FGI)
-                ### 🌍 Geopolitica e Rischio
-                (Valutazione del livello di tensione e impatto sui mercati)
-                
-                Usa un tono istituzionale, analitico e freddo. Sii diretto e usa elenchi puntati.
-                """
-                response = model.generate_content(prompt_report)
-                st.session_state.morning_brief = response.text
-            except Exception as e:
-                st.error(f"Errore di generazione: {e}")
-    else:
-        st.sidebar.warning("⚠️ Inserisci la GEMINI_API_KEY nei secrets.")
+                modelli = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                mod = next((m for m in modelli if "flash" in m.lower() or "pro" in m.lower()), modelli[0])
+                model = genai.GenerativeModel(mod)
+                prompt_report = f"Sei un CIO. Scrivi un Morning Brief basato su questi dati: {ai_context}. Struttura: Sintesi, Macro, Crypto, Geopolitica. Tono istituzionale, in Markdown."
+                st.session_state.morning_brief = model.generate_content(prompt_report).text
+            except Exception as e: st.error(e)
+    else: st.sidebar.warning("Manca API Key.")
 
 if st.session_state.morning_brief:
-    with st.sidebar.expander("📄 Visualizza Report", expanded=True):
+    with st.sidebar.expander("📄 Visualizza", expanded=True):
         st.markdown(st.session_state.morning_brief)
-        st.download_button(
-            label="💾 Scarica Report (.md)",
-            data=st.session_state.morning_brief,
-            file_name=f"Morning_Brief_{datetime.now().strftime('%Y%m%d')}.md",
-            mime="text/markdown"
-        )
+        st.download_button("💾 Scarica (.md)", data=st.session_state.morning_brief, file_name=f"Brief_{datetime.now().strftime('%Y%m%d')}.md")
 
-# --- SCHEDE ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏛️ Macro & ETF", "⚡ Crypto Pro", "🌍 Geopolitica", "🤖 AI Chatbot", "📚 Academy"])
+# --- SCHEDE: ORA SONO 6 ---
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro", "⚡ Crypto", "🌍 Geopolitica", "🔥 Stress Test", "🤖 AI Chatbot", "📚 Academy"])
 
-# ----------------- SCHEDA 1 (Macro & ETF) -----------------
+# ----------------- SCHEDA 1 (Macro) -----------------
 with tab1:
     st.header("🚦 Semaforo Macro Intelligente")
     if "1." in fase_attuale: st.error(f"🚨 **FASE ATTUALE: {fase_attuale}**")
@@ -236,9 +207,8 @@ with tab1:
         col_g1, col_g2 = st.columns(2)
         with col_g1: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Geografia'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Aree Geografiche (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
         with col_g2: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Settore'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Settori USA (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
-        st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
 
-# ----------------- SCHEDA 2 (Crypto Pro) -----------------
+# ----------------- SCHEDA 2 (Crypto) -----------------
 with tab2:
     st.header("⚡ Crypto Cycle & Altcoin Rotation")
     mayer_btc = current['Mayer_BTC']
@@ -250,35 +220,76 @@ with tab2:
     with col_pre2:
         st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=fgi_val, title={'text': f"Fear & Greed: {fgi_class}"}, gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 45], 'color': "#e57373"}, {'range': [55, 100], 'color': "#81c784"}]})).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
 
-    st.markdown("---")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Prezzo BTC", f"${current['Bitcoin']:,.0f}")
-    c2.metric("Mayer Multiple", f"{mayer_btc:.2f}")
-    c3.metric("RSI (14 gg)", f"{current['RSI_BTC']:.0f}")
-    c4.metric("Distanza da ATH", f"{current['BTC_Drawdown']:.1f}%")
-
     if not df_crypto.empty:
         st.plotly_chart(px.bar(df_crypto, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Altcoin Rotation (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
 
-# ----------------- SCHEDA 3 (Geopolitica & Radar) -----------------
+# ----------------- SCHEDA 3 (Geopolitica) -----------------
 with tab3:
-    st.header("🌍 Geopolitical Intelligence & Risk Radar")
+    st.header("🌍 Geopolitical Intelligence")
     col_g1, col_g2, col_g3 = st.columns([1.5, 1, 1])
     with col_g1:
-        st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=tension_index, title={'text': "Indice di Tensione Globale"}, gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [40, 60], 'color': "#ffb74d"}, {'range': [60, 100], 'color': "#e57373"}]})).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
+        st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=tension_index, title={'text': "Tensione Globale"}, gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [40, 60], 'color': "#ffb74d"}, {'range': [60, 100], 'color': "#e57373"}]})).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
     with col_g2:
-        st.subheader("🗺️ Regional Hotspots")
+        st.subheader("🗺️ Hotspots")
         for region, count in region_scores.items(): st.metric(region, f"{count} news", delta="🔥 Caldo" if count >= 2 else "Calmo", delta_color="inverse" if count >= 2 else "normal")
     with col_g3:
         st.subheader("🛢️ Reality Check")
         st.metric("Trend Oro (Z-Score)", f"{current['Z_Oro']:.2f}", delta="Risk-Off" if current['Z_Oro'] > 1 else "Neutro")
 
-    st.markdown("---")
-    if top_news:
-        for item in top_news: st.markdown(f"- **[{'🔴 Tension' if item['score'] > 0 else '🟢 Peace'}]** [{item['titolo']}]({item['link']})")
-
-# ----------------- SCHEDA 4 (AI Chatbot) -----------------
+# ----------------- SCHEDA 4 (🔥 STRESS TEST PORTAFOGLIO) -----------------
 with tab4:
+    st.header("🔥 Stress Test & Ottimizzazione Portafoglio")
+    st.write("Inserisci la tua allocazione attuale. L'IA la testerà contro i dati di mercato attuali per scovare vulnerabilità.")
+    
+    st.markdown("### 💼 La tua Allocazione")
+    col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+    with col_p1: alloc_azioni = st.number_input("Azioni / ETF (%)", min_value=0, max_value=100, value=50)
+    with col_p2: alloc_obbligazioni = st.number_input("Obbligazioni (%)", min_value=0, max_value=100, value=20)
+    with col_p3: alloc_crypto = st.number_input("Criptovalute (%)", min_value=0, max_value=100, value=10)
+    with col_p4: alloc_difesa = st.number_input("Oro / Cash (%)", min_value=0, max_value=100, value=20)
+    
+    totale = alloc_azioni + alloc_obbligazioni + alloc_crypto + alloc_difesa
+    if totale != 100:
+        st.warning(f"⚠️ Il totale fa {totale}%. Si consiglia di far quadrare il totale a 100% per un'analisi perfetta.")
+    
+    if st.button("🚀 Esegui Stress Test con AI", use_container_width=True):
+        if "GEMINI_API_KEY" in st.secrets:
+            with st.spinner("Il Risk Manager AI sta analizzando il portafoglio..."):
+                try:
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    modelli = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                    mod = next((m for m in modelli if "flash" in m.lower() or "pro" in m.lower()), modelli[0])
+                    model = genai.GenerativeModel(mod)
+                    
+                    prompt_stress = f"""
+                    Sei un Risk Manager istituzionale. Il portafoglio dell'utente è così composto:
+                    {alloc_azioni}% Azioni, {alloc_obbligazioni}% Obbligazioni, {alloc_crypto}% Criptovalute, {alloc_difesa}% Oro e Cash.
+                    Il contesto macro di OGGI (da usare per giudicare questo portafoglio) è: {ai_context}.
+                    
+                    Scrivi un report di Stress Test in Markdown rigoroso e professionale. Struttura:
+                    ### 🎯 Valutazione del Rischio
+                    (È un portafoglio troppo aggressivo o troppo difensivo rispetto alla FASE ATTUALE?)
+                    ### ⏱️ Orizzonte di Breve Termine (1-3 mesi)
+                    (Cosa succederà a questo portafoglio se i trend attuali continuano o peggiorano)
+                    ### 📅 Orizzonte di Medio Termine (6-12 mesi)
+                    (Impatto di tassi di interesse e ciclo economico su questi pesi)
+                    ### 🔭 Orizzonte di Lungo Termine (1-3 anni)
+                    (Considerazioni strutturali)
+                    ### 💡 Azioni di Ottimizzazione
+                    (Fornisci 2-3 suggerimenti pratici su cosa aumentare o diminuire per migliorare il rapporto rischio/rendimento oggi).
+                    """
+                    
+                    risposta_stress = model.generate_content(prompt_stress).text
+                    
+                    st.markdown("---")
+                    st.markdown(risposta_stress)
+                except Exception as e:
+                    st.error(f"Errore durante lo stress test: {e}")
+        else:
+            st.error("Inserisci la GEMINI_API_KEY nei secrets per attivare lo stress test.")
+
+# ----------------- SCHEDA 5 (AI Chatbot) -----------------
+with tab5:
     st.header("🤖 Quant AI Assistant")
     if "GEMINI_API_KEY" in st.secrets:
         try:
@@ -290,21 +301,19 @@ with tab4:
             if "chat_history" not in st.session_state: st.session_state.chat_history = []
             for m in st.session_state.chat_history: st.chat_message("user" if m["role"]=="user" else "assistant").markdown(m["content"])
             
-            if prompt := st.chat_input("Chiedimi un'analisi sul portafoglio..."):
+            if prompt := st.chat_input("Chiedimi un'analisi..."):
                 st.session_state.chat_history.append({"role": "user", "content": prompt})
                 st.chat_message("user").markdown(prompt)
                 with st.spinner("Analisi AI in corso..."):
                     response = model.generate_content(f"{ai_context}\n\nDomanda: {prompt}")
                     st.chat_message("assistant").markdown(response.text)
                     st.session_state.chat_history.append({"role": "assistant", "content": response.text})
-        except Exception as e: st.error(f"Errore API: {e}")
-    else: st.warning("⚠️ Inserisci la chiave API nei secrets.")
+        except: st.error("Errore API.")
 
-# ----------------- SCHEDA 5 (Academy Educativa) -----------------
-with tab5:
+# ----------------- SCHEDA 6 (Academy) -----------------
+with tab6:
     st.header("📚 Macro Academy")
-    with st.expander("🌍 1. Macroeconomia & Banche Centrali"): st.markdown("**Che cos'è la Macroeconomia?**\nStudio del comportamento dell'economia nel suo complesso. Il vero 'burattinaio' dei mercati è la **Banca Centrale**.\n\n**La Regola d'Oro:**\n* Se l'inflazione sale, la Banca **alza i tassi** -> *Azioni scendono (Risk-Off).*\n* Quando c'è crisi, la Banca **taglia i tassi** -> *Azioni salgono (Risk-On).*")
-    with st.expander("📈 2. Rotazione Settoriale"): st.markdown("**Cos'è?** I capitali si spostano in base al ciclo:\n* **Ciclici (Tech, Beni di Lusso):** Vanno bene quando l'economia cresce.\n* **Difensivi (Salute, Utilities):** Vanno bene durante le recessioni.")
-    with st.expander("🏛️ 3. Curva dei Rendimenti"): st.markdown("Se presti soldi a breve termine (2 anni) e ricevi un interesse più alto rispetto al lungo termine (10 anni), la curva si **Inverte**. Questo panico di breve termine anticipa storicamente una **Recessione**.")
-    with st.expander("💱 4. Dollaro e Oro"): st.markdown("* Il **Dollaro** è il bene rifugio mondiale. Se c'è panico, il DXY sale e le Azioni scendono.\n* L'**Oro** protegge dalla svalutazione e dai disastri geopolitici.")
-    with st.expander("⚡ 5. Il Ciclo Crypto"): st.markdown("Il mercato Crypto segue un flusso ciclico:\n1. I capitali entrano in **Bitcoin**.\n2. I profitti vengono spostati su **Ethereum**.\n3. Poi sulle **Layer 1** (Solana, Avalanche).\n4. Infine la mania delle **Memecoin** segnala la fine della bolla.")
+    with st.expander("🌍 1. Macroeconomia & Banche Centrali"): st.markdown("**Che cos'è la Macroeconomia?**\nStudio del comportamento dell'economia. La Banca Centrale governa tutto coi tassi.\n\n**Regola base:** Inflazione alta = Tassi alti = Azioni scendono.")
+    with st.expander("📈 2. Rotazione Settoriale"): st.markdown("I capitali si spostano in base al ciclo:\n* **Ciclici (Tech, Lusso):** Economia in crescita.\n* **Difensivi (Salute, Utilities):** Recessioni.")
+    with st.expander("🏛️ 3. Curva dei Rendimenti"): st.markdown("Se i tassi a breve termine superano quelli a lungo termine, c'è panico nel presente. Segnala quasi sempre una **Recessione** in arrivo.")
+    with st.expander("💱 4. Dollaro e Oro"): st.markdown("Il **Dollaro (DXY)** è il bene rifugio. Se c'è panico, sale e le Azioni scendono. L'**Oro** protegge da svalutazione e disastri geopolitici.")
