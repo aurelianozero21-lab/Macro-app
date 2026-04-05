@@ -270,17 +270,32 @@ with tab4:
     if "GEMINI_API_KEY" in st.secrets:
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-pro')
-            if "chat_history" not in st.session_state: st.session_state.chat_history = []
-            for m in st.session_state.chat_history: st.chat_message("user" if m["role"]=="user" else "assistant").markdown(m["content"])
-            if prompt := st.chat_input("Chiedimi un'analisi..."):
+            
+            # Usiamo il modello di ultima generazione standard e attivo
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            if "chat_history" not in st.session_state: 
+                st.session_state.chat_history = []
+                
+            for m in st.session_state.chat_history: 
+                st.chat_message("user" if m["role"]=="user" else "assistant").markdown(m["content"])
+                
+            if prompt := st.chat_input("Chiedimi un'analisi sul portafoglio..."):
                 st.session_state.chat_history.append({"role": "user", "content": prompt})
                 st.chat_message("user").markdown(prompt)
+                
                 with st.spinner("Analisi AI in corso..."):
-                    response = model.generate_content(f"{ai_context}\n\nDomanda: {prompt}")
-                    st.chat_message("assistant").markdown(response.text)
-                    st.session_state.chat_history.append({"role": "assistant", "content": response.text})
-        except: st.error("Errore API. Controlla i secrets.")
+                    # Ora se c'è un errore, l'app non lo nasconde!
+                    try:
+                        response = model.generate_content(f"{ai_context}\n\nDomanda: {prompt}")
+                        st.chat_message("assistant").markdown(response.text)
+                        st.session_state.chat_history.append({"role": "assistant", "content": response.text})
+                    except Exception as e:
+                        st.error(f"Dettaglio Errore Generazione Google: {e}")
+        except Exception as e: 
+            st.error(f"Errore di Configurazione API: {e}")
+    else:
+        st.warning("⚠️ Chiave API non trovata. Controlla i secrets di Streamlit.")
 
 # ----------------- SCHEDA 5 (Academy Educativa) -----------------
 with tab5:
