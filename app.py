@@ -179,7 +179,7 @@ if st.session_state.morning_brief:
         st.markdown(st.session_state.morning_brief)
         st.download_button("💾 Scarica (.md)", data=st.session_state.morning_brief, file_name=f"Brief_{datetime.now().strftime('%Y%m%d')}.md")
 
-# --- NUOVO MODULO SIDEBAR: TELEGRAM ALERTS (SAAS UX) ---
+# --- NUOVO MODULO SIDEBAR: TELEGRAM ALERTS (SAAS UX RIPARATA) ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔔 Alert su Telegram")
 
@@ -197,10 +197,11 @@ else:
         
     with st.sidebar.expander("📲 Ricevi Alert (Client Mode)"):
         st.markdown("Ricevi queste notifiche direttamente sul tuo telefono.")
-        st.markdown("1. Clicca [**👉 QUI**](https://t.me/getmyid_bot) per aprire Telegram e premi Avvia.")
-        st.markdown("2. Copia il numero che ti risponde (Your user ID).")
+        bot_url = st.secrets.get("TG_BOT_URL", "https://t.me/Inserisci_Qui_Il_Tuo_Bot")
+        st.markdown(f"**Passo 1:** Apri il nostro Bot Ufficiale cliccando [👉 QUI]({bot_url}) e premi **Avvia** (fondamentale per l'anti-spam).")
+        st.markdown("**Passo 2:** Clicca [👉 QUI](https://t.me/getmyid_bot) per ottenere il tuo codice ID numerico.")
         
-        tg_chat = st.text_input("3. Incolla il tuo ID qui:")
+        tg_chat = st.text_input("Passo 3: Incolla il tuo ID qui:")
         
         if st.button("🔔 Attiva Notifiche", use_container_width=True):
             if "TG_TOKEN" in st.secrets:
@@ -212,14 +213,13 @@ else:
                         if res.status_code == 200:
                             st.success("✅ Alert inviato con successo al tuo telefono!")
                         else:
-                            # Se l'utente non ha mai avviato IL TUO BOT, Telegram blocca l'invio per spam.
-                            st.error("❌ Errore. Assicurati di aver cercato il nostro Bot Ufficiale su Telegram e aver premuto 'Avvia' prima di iscriverti.")
+                            st.error(f"❌ Errore (Codice {res.status_code}): Il bot non può scriverti. Assicurati di aver eseguito il Passo 1 per sbloccare l'anti-spam!")
                     except Exception as e:
                         st.error(f"Errore di rete: {e}")
                 else:
                     st.warning("Inserisci il tuo ID Telegram prima di attivare.")
             else:
-                st.error("⚠️ Errore di Sistema: L'amministratore non ha configurato il Bot Ufficiale (TG_TOKEN mancante nei secrets).")
+                st.error("⚠️ Errore di Sistema: L'amministratore non ha configurato il Bot Ufficiale (TG_TOKEN mancante).")
 
 # --- SCHEDE ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro", "⚡ Crypto", "🌍 Geopolitica", "🔥 Stress Test", "🤖 AI Chatbot", "📚 Academy"])
