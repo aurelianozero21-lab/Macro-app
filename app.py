@@ -243,6 +243,7 @@ with tab3:
         st.plotly_chart(fig_geo, use_container_width=True)
 
 with tab4:
+   with tab4:
     st.header("🤖 Quant AI Assistant (Powered by Gemini)")
     st.write("Analizza i dati in tempo reale del cruscotto e ti risponde come un analista professionista.")
     
@@ -250,14 +251,16 @@ with tab4:
         st.warning("⚠️ Manca la GEMINI_API_KEY nei Secrets di Streamlit! Inseriscila per usare la chat.")
     else:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ai_context)
+        # Usiamo gemini-pro che è universalmente supportato da tutte le versioni
+        model = genai.GenerativeModel('gemini-pro')
 
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
 
         for message in st.session_state.chat_history:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+            if message["role"] != "system": # Non mostriamo il prompt di sistema all'utente
+                with st.chat_message("user" if message["role"] == "user" else "assistant"):
+                    st.markdown(message["content"])
 
         if prompt := st.chat_input("Chiedimi un parere sull'allocazione attuale del portafoglio..."):
             st.session_state.chat_history.append({"role": "user", "content": prompt})
@@ -266,10 +269,9 @@ with tab4:
 
             with st.spinner("L'AI sta analizzando i mercati..."):
                 try:
-                    # Inviamo lo storico per mantenere il contesto della conversazione
-                    formatted_history = [{"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]} for m in st.session_state.chat_history[:-1]]
-                    chat = model.start_chat(history=formatted_history)
-                    response = chat.send_message(prompt)
+                    # Passiamo il contesto e la domanda tutto insieme
+                    full_prompt = f"{ai_context}\n\nDomanda dell'utente: {prompt}"
+                    response = model.generate_content(full_prompt)
                     
                     with st.chat_message("assistant"):
                         st.markdown(response.text)
