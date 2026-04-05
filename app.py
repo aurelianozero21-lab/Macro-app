@@ -108,20 +108,115 @@ Usa questi dati per contestualizzare le tue risposte se l'utente ti chiede consi
 tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Macro & TradFi", "⚡ Crypto", "🌍 Geopolitica", "🤖 AI Quant Assistant"])
 
 with tab1:
-    st.header("🚦 Semaforo Macro Intelligente")
-    if "1." in fase_attuale:
-        st.error(f"🚨 **FASE ATTUALE: {fase_attuale}**\n\n**Settori:** Difesa, Oro, Dollaro USA, Utilities.")
-    elif "2." in fase_attuale:
-        st.warning(f"⚖️ **FASE ATTUALE: {fase_attuale}**\n\n**Settori:** Consumi di base, Cash, Tech.")
-    else:
-        st.success(f"🚀 **FASE ATTUALE: {fase_attuale}**\n\n**Settori:** Industriali, Finanza, Rischio.")
+   # --- MOTORE SCREENER ETF (Specifico per la Scheda 1) ---
+@st.cache_data(ttl=3600)
+def get_etf_screener():
+    # I 10 ETF fondamentali per mappare il mondo
+    tickers = {
+        'USA (SPY)': 'SPY', 'Europa (VGK)': 'VGK', 'Emergenti (EEM)': 'EEM', 'Giappone (EWJ)': 'EWJ',
+        'Tech (XLK)': 'XLK', 'Salute (XLV)': 'XLV', 'Finanza (XLF)': 'XLF', 'Energia (XLE)': 'XLE', 
+        'Utilities (XLU)': 'XLU', 'Industria (XLI)': 'XLI'
+    }
     
+    dati = []
+    for nome, tk in tickers.items():
+        try:
+            hist = yf.Ticker(tk).history(period="1y")
+            if len(hist) > 50:
+                prezzo_attuale = hist['Close'].iloc[-1]
+                sma_50 = hist['Close'].tail(50).mean()
+                sma_200 = hist['Close'].mean() # Media approssimativa a 200 giorni su 1 anno di dati
+                perf_1m = ((prezzo_attuale / hist['Close'].iloc[-21]) - 1) * 100
+                
+                # Logica del Semaforo Operativo ETF
+                if prezzo_attuale > sma_50 and sma_50 > sma_200:
+                    segnale = "🟢 Trend Forte (Compra)"
+                elif prezzo_attuale > sma_50 and sma_50 <= sma_200:
+                    segnale = "🟡 In Rimbalzo (Accumula)"
+                elif prezzo_attuale <= sma_50 and sma_50 > sma_200:
+                    segnale = "🟡 Correzione (Mantieni/Attendi)"
+                else:
+                    segnale = "🔴 Trend Negativo (Evita)"
+                    
+                tipo = 'Geografia' if nome in ['USA (SPY)', 'Europa (VGK)', 'Emergenti (EEM)', 'Giappone (EWJ)'] else 'Settore'
+                
+                dati.append({
+                    'Categoria': tipo,
+                    'Asset': nome,
+                    'Prezzo ($)': round(prezzo_attuale, 2),
+                    'Perf. 1 Mese (%)': round(perf_1m, 2),
+                    'Segnale Operativo': segnale
+                })
+        except:
+            continue
+            
+    return pd.DataFrame(dati)
+
+# ==========================================
+# SCHEDA 1: MACROECONOMIA E ROTAZIONE SETTORIALE
+# ==========================================
+with tab1:
+    st.header("🚦 Semaforo Macro Intelligente")
+    
+    # 1. Il quadro generale Macro (Rimane uguale)
+    if "1." in fase_attuale:
+        st.error(f"🚨 **FASE ATTUALE: {fase_attuale}**\n\n**Ambiente:** Curva invertita o forte rischio geopolitico. Difesa massima.")
+    elif "2." in fase_attuale:
+        st.warning(f"⚖️ **FASE ATTUALE: {fase_attuale}**\n\n**Ambiente:** Incertezza. Mercato debole o moderata tensione. Falso segnale di ripresa possibile.")
+    else:
+        st.success(f"🚀 **FASE ATTUALE: {fase_attuale}**\n\n**Ambiente:** Clima disteso e trend rialzista solido. Propensione al rischio.")
+    
+    st.markdown("---")
+    
+    # 2. La nuova sezione di Analisi ETF
+    st.header("🗺️ Mappa dei Mercati e Rotazione Settoriale")
+    st.write("Analisi in tempo reale della forza dei mercati globali e dei settori dell'economia americana.")
+    
+    with st.spinner("Scansione dei Top 10 ETF globali in corso..."):
+        df_etfs = get_etf_screener()
+    
+    if not df_etfs.empty:
+        # Dividiamo i dati per i grafici
+        df_geo = df_etfs[df_etfs['Categoria'] == 'Geografia']
+        df_sec = df_etfs[df_etfs['Categoria'] == 'Settore']
+        
+        col_grafico1, col_grafico2 = st.columns(2)
+        
+        with col_grafico1:
+            fig_geo = px.bar(df_geo, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)',
+                             color_continuous_scale=px.colors.diverging.RdYlGn,
+                             title="Performance Aree Geografiche (Ultimo Mese)")
+            fig_geo.update_layout(coloraxis_showscale=False, height=300)
+            st.plotly_chart(fig_geo, use_container_width=True)
+            
+        with col_grafico2:
+            fig_sec = px.bar(df_sec, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)',
+                             color_continuous_scale=px.colors.diverging.RdYlGn,
+                             title="Rotazione Settoriale USA (Ultimo Mese)")
+            fig_sec.update_layout(coloraxis_showscale=False, height=300)
+            st.plotly_chart(fig_sec, use_container_width=True)
+            
+        st.subheader("📋 Top 10 ETF Tracker (Semaforo Trend)")
+        st.write("Il segnale operativo si basa sull'incrocio tra il prezzo attuale e le medie mobili a 50 e 200 giorni.")
+        
+        # Mostriamo la tabella formattata pulita
+        st.dataframe(
+            df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.error("Dati degli ETF non disponibili al momento.")
+
+    st.markdown("---")
+    
+    # 3. Metriche base (Opzionale: puoi tenerle per chiudere la scheda)
+    st.subheader("🌡️ Termometro di Borsa (Z-Score Base)")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("S&P 500 Z-Score", f"{current['Z_S&P 500']:.2f}")
     c2.metric("Dollaro DXY", f"{current['Z_Dollaro DXY']:.2f}")
     c3.metric("Oro", f"{current['Z_Oro']:.2f}")
     c4.metric("Treasury 10Y", f"{current['Z_Treasury 10Y']:.2f}")
-
 with tab2:
     st.header("👑 Bitcoin (BTC)")
     mayer_btc = current['Mayer_BTC']
@@ -155,7 +250,7 @@ with tab4:
         st.warning("⚠️ Manca la GEMINI_API_KEY nei Secrets di Streamlit! Inseriscila per usare la chat.")
     else:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=ai_context)
+        model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ai_context)
 
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
