@@ -264,36 +264,60 @@ with tab3:
     else:
         st.info("Nessuna notizia ad alta priorità rilevata.")
 
-# ----------------- SCHEDA 4 (AI Chatbot) -----------------
+# ----------------- SCHEDA 4 (AI Chatbot - Auto-Discovery Definitivo) -----------------
 with tab4:
     st.header("🤖 Quant AI Assistant")
+    
     if "GEMINI_API_KEY" in st.secrets:
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             
-            # Usiamo il modello di ultima generazione standard e attivo
-     model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ai_context)
+            # 1. AUTO-DISCOVERY: Chiediamo a Google quali modelli possiamo usare
+            modelli_disponibili = []
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    modelli_disponibili.append(m.name)
             
-            if "chat_history" not in st.session_state: 
-                st.session_state.chat_history = []
+            if not modelli_disponibili:
+                st.error("❌ La tua API Key non ha accesso a nessun modello di testo. Controlla il tuo account Google AI Studio.")
+            else:
+                # Mostriamo un piccolo menu a tendina per farti vedere i modelli sbloccati
+                with st.expander("🛠️ Debug: Modelli sbloccati dalla tua API Key", expanded=False):
+                    st.write(modelli_disponibili)
                 
-            for m in st.session_state.chat_history: 
-                st.chat_message("user" if m["role"]=="user" else "assistant").markdown(m["content"])
+                # 2. SELEZIONE DINAMICA: Prendiamo il miglior modello disponibile
+                target_model = modelli_disponibili[0] # Fallback di sicurezza (prende il primo della lista)
+                for m in modelli_disponibili:
+                    if "flash" in m.lower() or "pro" in m.lower():
+                        target_model = m
+                        break # Prende il primo modello "flash" o "pro" che trova nella tua lista personale
+                        
+                st.success(f"✅ Connessione stabilita. Modello in uso: **{target_model.replace('models/', '')}**")
                 
-            if prompt := st.chat_input("Chiedimi un'analisi sul portafoglio..."):
-                st.session_state.chat_history.append({"role": "user", "content": prompt})
-                st.chat_message("user").markdown(prompt)
+                # Inizializziamo il modello esatto trovato
+                model = genai.GenerativeModel(target_model)
                 
-                with st.spinner("Analisi AI in corso..."):
-                    # Ora se c'è un errore, l'app non lo nasconde!
-                    try:
-                        response = model.generate_content(f"{ai_context}\n\nDomanda: {prompt}")
-                        st.chat_message("assistant").markdown(response.text)
-                        st.session_state.chat_history.append({"role": "assistant", "content": response.text})
-                    except Exception as e:
-                        st.error(f"Dettaglio Errore Generazione Google: {e}")
+                if "chat_history" not in st.session_state: 
+                    st.session_state.chat_history = []
+                    
+                for m in st.session_state.chat_history: 
+                    st.chat_message("user" if m["role"]=="user" else "assistant").markdown(m["content"])
+                    
+                if prompt := st.chat_input("Chiedimi un'analisi sul portafoglio o sui mercati..."):
+                    st.session_state.chat_history.append({"role": "user", "content": prompt})
+                    st.chat_message("user").markdown(prompt)
+                    
+                    with st.spinner("Analisi dei dati Macro e Crypto in corso..."):
+                        try:
+                            # Iniettiamo i dati live + la domanda dell'utente
+                            response = model.generate_content(f"{ai_context}\n\nDomanda dell'utente: {prompt}")
+                            st.chat_message("assistant").markdown(response.text)
+                            st.session_state.chat_history.append({"role": "assistant", "content": response.text})
+                        except Exception as e:
+                            st.error(f"Errore durante la generazione della risposta: {e}")
+                            
         except Exception as e: 
-            st.error(f"Errore di Configurazione API: {e}")
+            st.error(f"Errore di comunicazione con Google API: {e}")
     else:
         st.warning("⚠️ Chiave API non trovata. Controlla i secrets di Streamlit.")
 
