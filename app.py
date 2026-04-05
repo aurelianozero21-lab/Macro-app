@@ -148,8 +148,6 @@ tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Macro & ETF", "⚡ Crypto Pro", "🌍
 
 # ----------------- SCHEDA 1 (Macro & ETF) -----------------
 with tab1:
-  # ----------------- SCHEDA 1 (Macro & ETF) -----------------
-with tab1:
     st.header("🚦 Semaforo Macro Intelligente")
     if "1." in fase_attuale: st.error(f"🚨 **FASE ATTUALE: {fase_attuale}**")
     elif "2." in fase_attuale: st.warning(f"⚖️ **FASE ATTUALE: {fase_attuale}**")
