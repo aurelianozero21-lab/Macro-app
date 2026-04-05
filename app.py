@@ -148,19 +148,67 @@ tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Macro & ETF", "⚡ Crypto Pro", "🌍
 
 # ----------------- SCHEDA 1 (Macro & ETF) -----------------
 with tab1:
+  # ----------------- SCHEDA 1 (Macro & ETF) -----------------
+with tab1:
     st.header("🚦 Semaforo Macro Intelligente")
     if "1." in fase_attuale: st.error(f"🚨 **FASE ATTUALE: {fase_attuale}**")
     elif "2." in fase_attuale: st.warning(f"⚖️ **FASE ATTUALE: {fase_attuale}**")
     else: st.success(f"🚀 **FASE ATTUALE: {fase_attuale}**")
+    
     st.markdown("---")
     
+    # --- NUOVA SEZIONE: PREVISIONI E FLUSSI DI CAPITALE ---
+    st.header("🔮 Matrice Previsionale & Mega-Trend")
+    st.write("Analisi dei flussi di capitale attesi in base alla legislazione, alle politiche monetarie e alle news correnti.")
+    
+    col_st, col_mt, col_lt = st.columns(3)
+    
+    with col_st:
+        st.subheader("⏱️ Breve Termine (1-3 Mesi)")
+        st.write("*Guidato da: Momentum e Notizie Geopolitiche*")
+        if tension_index >= 60:
+            st.error("🛡️ Focus: Geopolitica e Difesa")
+            st.markdown("- **Aerospazio e Difesa (ITA):** Aumento tensioni e budget militari.\n- **Cybersecurity (CIBR):** Elevato rischio di guerre informatiche statali.\n- **Energia (XLE):** Rischio di interruzione delle supply chain petrolifere.")
+        elif "1." in fase_attuale:
+            st.error("🧱 Focus: Protezione del Capitale")
+            st.markdown("- **Utilities (XLU) & Salute (XLV):** Settori anticiclici a domanda anelastica.\n- **Oro (GLD):** Assorbe i flussi in fuga dall'azionario.")
+        else:
+            st.success("🔥 Focus: Momentum e Rischio")
+            st.markdown("- **Tecnologia (XLK):** Guidata dai flussi speculativi e dalla compiacenza.\n- **Finanza (XLF):** Beneficia di un'economia solida e tassi stabili.")
+            
+    with col_mt:
+        st.subheader("📅 Medio Termine (6-12 Mesi)")
+        st.write("*Guidato da: Ciclo Economico e Banche Centrali*")
+        if "1." in fase_attuale or "2." in fase_attuale:
+            st.warning("📉 Focus: Taglio dei Tassi")
+            st.markdown("- **Bonds Governativi Lunga Scadenza (TLT):** Prezzano i futuri tagli dei tassi d'interesse.\n- **Real Estate (XLRE):** Ripresa grazie ai mutui più economici.\n- **Consumi Discrezionali (XLY):** Anticipazione della ripresa dei consumi.")
+        else:
+            st.success("🏭 Focus: Espansione Piena")
+            st.markdown("- **Industriali (XLI) & Materiali (XLB):** Massima capacità produttiva ed espansione aziendale.\n- **Emerging Markets (EEM):** Attraggono capitali grazie al rischio globale ridotto.")
+            
+    with col_lt:
+        st.subheader("🔭 Lungo Termine (1-3 Anni)")
+        st.write("*Guidato da: Legislazione e Cambiamenti Strutturali*")
+        st.info("🌐 Focus: Mega-Trend Generazionali")
+        st.markdown("- **Intelligenza Artificiale & Semiconduttori (SMH):** Il nuovo ciclo industriale e i massicci investimenti infrastrutturali.\n- **Transizione Energetica e Rame (COPX):** Elettrificazione globale e sussidi governativi.\n- **Healthcare Innovation (XLV):** Invecchiamento demografico globale e innovazione biotech.")
+
+    st.markdown("---")
+    
+    st.header("🗺️ Mappa dei Mercati e Rotazione Settoriale")
     if not df_etfs.empty:
         df_geo = df_etfs[df_etfs['Categoria'] == 'Geografia']
         df_sec = df_etfs[df_etfs['Categoria'] == 'Settore']
         col_g1, col_g2 = st.columns(2)
         with col_g1: st.plotly_chart(px.bar(df_geo, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Aree Geografiche (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
         with col_g2: st.plotly_chart(px.bar(df_sec, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Settori USA (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
-        st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
+        st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("S&P 500 Z-Score", f"{current['Z_S&P 500']:.2f}")
+    c2.metric("Dollaro DXY", f"{current['Z_Dollaro DXY']:.2f}")
+    c3.metric("Oro", f"{current['Z_Oro']:.2f}")
+    c4.metric("Treasury 10Y", f"{current['Z_Treasury 10Y']:.2f}")
 
 # ----------------- SCHEDA 2 (Crypto Upgrade) -----------------
 with tab2:
