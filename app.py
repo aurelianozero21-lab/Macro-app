@@ -9,6 +9,7 @@ import google.generativeai as genai
 from io import BytesIO
 import urllib.request
 import json
+from datetime import datetime
 
 st.set_page_config(page_title="Macro Dashboard Pro", layout="wide")
 st.title("📊 Global Macro, Crypto & AI Assistant")
@@ -18,13 +19,13 @@ with st.expander("📚 Legenda e Glossario Rapido"):
     * **Z-Score:** Misura se un asset è in trend positivo (> 0) o negativo (< 0).
     * **Curva Rendimenti:** Se Invertita (< 0) segnala recessione. 
     * **Mayer Multiple:** Prezzo BTC diviso per la media a 200 giorni. < 1.0 = Accumulo. > 2.4 = Bolla.
-    * **VIX (Indice della Paura):** Sopra 20 c'è nervosismo, sopra 30 c'è panico, sotto 15 c'è compiacenza.
+    * **Crypto Fear & Greed:** Misura il sentiment crypto da 0 (Panico) a 100 (Euforia).
     """)
 
-# --- 1. MOTORE DATI MACRO (Aggiunti VIX e Petrolio) ---
+# --- MOTORI DI CALCOLO ---
 @st.cache_data(ttl=3600)
 def load_all_data(api_key, lookback):
-    assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Petrolio': 'CL=F', 'Treasury 10Y': '^TNX', 'VIX': '^VIX'}
+    assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX'}
     df = pd.DataFrame()
     for name, ticker in assets.items():
         hist = yf.Ticker(ticker).history(period="15y")
@@ -50,12 +51,11 @@ def load_all_data(api_key, lookback):
     df['YieldCurve'] = yc
     df = df.ffill().dropna()
     
-    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Petrolio', 'Treasury 10Y', 'VIX', 'Bitcoin']:
+    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin']:
         df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
 
-# --- 2. MOTORE ETF SCREENER ---
 @st.cache_data(ttl=3600)
 def get_etf_screener():
     tickers = {
@@ -83,7 +83,6 @@ def get_etf_screener():
         except: continue
     return pd.DataFrame(dati)
 
-# --- 3. MOTORE CRYPTO ALTCOIN E F&G ---
 @st.cache_data(ttl=3600)
 def get_crypto_screener():
     tickers = {'Bitcoin': 'BTC-USD', 'Ethereum': 'ETH-USD', 'Solana': 'SOL-USD', 'Binance': 'BNB-USD', 'Avalanche': 'AVAX-USD'}
@@ -106,54 +105,25 @@ def get_crypto_fgi():
             return int(data['data'][0]['value']), data['data'][0]['value_classification']
     except: return 50, "Neutral"
 
-# --- 4. MOTORE GEOPOLITICO (Aggiornato con Regional Tracking) ---
 @st.cache_data(ttl=1800)
 def analyze_geopolitics():
     url = "https://news.google.com/rss/search?q=geopolitics+OR+sanctions+OR+conflict+OR+economy+markets&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
-    
     if not feed.entries: return 50, [], {}
-        
-    risk_words = ['war', 'strike', 'tariff', 'sanction', 'missile', 'tension', 'conflict', 'invasion']
-    peace_words = ['peace', 'deal', 'agreement', 'ceasefire', 'talks']
-    
-    regions = {
-        'Medio Oriente': ['israel', 'iran', 'gaza', 'yemen', 'saudi', 'lebanon', 'middle east'],
-        'Est Europa': ['russia', 'ukraine', 'putin', 'nato', 'moscow', 'kiev'],
-        'Asia-Pacifico': ['china', 'taiwan', 'beijing', 'xi', 'korea', 'asia']
-    }
-    
-    region_scores = {'Medio Oriente': 0, 'Est Europa': 0, 'Asia-Pacifico': 0}
-    score_totale = 0
-    news_items = []
-    
+    risk_words, peace_words = ['war', 'strike', 'tariff', 'sanction', 'missile', 'tension'], ['peace', 'deal', 'agreement', 'ceasefire', 'talks']
+    regions = {'Medio Oriente': ['israel', 'iran', 'gaza', 'yemen'], 'Est Europa': ['russia', 'ukraine', 'putin', 'nato'], 'Asia-Pacifico': ['china', 'taiwan', 'beijing', 'xi']}
+    region_scores, score_totale, news_items = {'Medio Oriente': 0, 'Est Europa': 0, 'Asia-Pacifico': 0}, 0, []
     for entry in feed.entries[:25]:
         titolo = entry.title.lower()
-        
-        # Calcolo sentiment
         item_score = sum(1 for w in risk_words if w in titolo) - sum(1 for w in peace_words if w in titolo)
         score_totale += item_score
-        
-        # Scansione Regionale
         for region, keywords in regions.items():
-            if any(kw in titolo for kw in keywords):
-                region_scores[region] += 1
-                
-        if item_score != 0 and len(news_items) < 8:
-            news_items.append({'titolo': entry.title, 'link': entry.link, 'score': item_score})
-            
-    tension_index = max(0, min(100, 50 + (score_totale * 4)))
-    return tension_index, news_items, region_scores
+            if any(kw in titolo for kw in keywords): region_scores[region] += 1
+        if item_score != 0 and len(news_items) < 8: news_items.append({'titolo': entry.title, 'link': entry.link, 'score': item_score})
+    return max(0, min(100, 50 + (score_totale * 4))), news_items, region_scores
 
-# --- INTERFACCIA E CARICAMENTO ---
+# --- INIZIALIZZAZIONE DATI ---
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
-
-def to_excel(df):
-    output = BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, index=True, sheet_name='Data')
-    writer.close()
-    return output.getvalue()
 
 with st.spinner("📊 Inizializzazione Motori Quantitativi..."):
     try:
@@ -162,13 +132,10 @@ with st.spinner("📊 Inizializzazione Motori Quantitativi..."):
         df_crypto = get_crypto_screener()
         fgi_val, fgi_class = get_crypto_fgi()
         tension_index, top_news, region_scores = analyze_geopolitics()
+        current = df.iloc[-1]
     except Exception as e:
         st.error(f"Errore caricamento dati base: {e}")
         st.stop()
-
-current = df.iloc[-1]
-st.sidebar.markdown("---")
-st.sidebar.download_button("📥 Scarica Database in Excel", data=to_excel(df), file_name="macro_data.xlsx", mime="application/vnd.ms-excel")
 
 def calcola_fase_avanzata(yc, z_sp500, tension):
     if yc < 0 or tension >= 65: return '1. Allarme Rosso (Risk-Off)'
@@ -176,10 +143,71 @@ def calcola_fase_avanzata(yc, z_sp500, tension):
     else: return '3. Espansione (Risk-On)'
 
 fase_attuale = calcola_fase_avanzata(current['YieldCurve'], current['Z_S&P 500'], tension_index)
-ai_context = f"Dati live: Fase {fase_attuale}, S&P500 Z:{current['Z_S&P 500']:.2f}, Geopolitica:{tension_index}, BTC:${current['Bitcoin']:.0f}, Crypto FGI: {fgi_val}."
+ai_context = f"Dati live - Fase: {fase_attuale}, S&P500 Z:{current['Z_S&P 500']:.2f}, Oro Z:{current['Z_Oro']:.2f}, Geopolitica:{tension_index}/100, BTC:${current['Bitcoin']:.0f}, BTC Mayer:{current['Mayer_BTC']:.2f}, Crypto FGI: {fgi_val}/100."
+
+# --- SIDEBAR: EXPORT E MORNING BRIEF (NUOVO!) ---
+st.sidebar.markdown("---")
+def to_excel(df):
+    output = BytesIO()
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    df.to_excel(writer, index=True, sheet_name='Data')
+    writer.close()
+    return output.getvalue()
+
+st.sidebar.download_button("📥 Scarica Database in Excel", data=to_excel(df), file_name="macro_data.xlsx", mime="application/vnd.ms-excel")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🗞️ Morning Briefing AI")
+st.sidebar.write("Genera un report esecutivo sui mercati di oggi.")
+
+if "morning_brief" not in st.session_state:
+    st.session_state.morning_brief = ""
+
+if st.sidebar.button("🤖 Genera Report"):
+    if "GEMINI_API_KEY" in st.secrets:
+        with st.sidebar.status("✍️ Stesura report in corso..."):
+            try:
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                modelli_disponibili = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                target_model = next((m for m in modelli_disponibili if "flash" in m.lower() or "pro" in m.lower()), modelli_disponibili[0])
+                
+                model = genai.GenerativeModel(target_model)
+                prompt_report = f"""
+                Sei il Chief Investment Officer (CIO) di un fondo hedge quantitativo.
+                Scrivi il tuo "Morning Brief" giornaliero per i clienti. Oggi è il {datetime.now().strftime("%d/%m/%Y")}.
+                Basati RIGOROSAMENTE su questi dati attuali estratti dal cruscotto: {ai_context}.
+                
+                Struttura il report in Markdown così:
+                # 📊 Morning Briefing Quantitativo
+                **Sintesi Esecutiva:** (Riassunto netto di 3 righe)
+                ### 🏛️ Macro e Azionario
+                (Analisi su fase attuale, S&P 500 e Oro)
+                ### ⚡ Crypto Ecosystem
+                (Analisi su Bitcoin, Mayer Multiple e Sentiment FGI)
+                ### 🌍 Geopolitica e Rischio
+                (Valutazione del livello di tensione e impatto sui mercati)
+                
+                Usa un tono istituzionale, analitico e freddo. Sii diretto e usa elenchi puntati.
+                """
+                response = model.generate_content(prompt_report)
+                st.session_state.morning_brief = response.text
+            except Exception as e:
+                st.error(f"Errore di generazione: {e}")
+    else:
+        st.sidebar.warning("⚠️ Inserisci la GEMINI_API_KEY nei secrets.")
+
+if st.session_state.morning_brief:
+    with st.sidebar.expander("📄 Visualizza Report", expanded=True):
+        st.markdown(st.session_state.morning_brief)
+        st.download_button(
+            label="💾 Scarica Report (.md)",
+            data=st.session_state.morning_brief,
+            file_name=f"Morning_Brief_{datetime.now().strftime('%Y%m%d')}.md",
+            mime="text/markdown"
+        )
 
 # --- SCHEDE ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏛️ Macro & ETF", "⚡ Crypto Pro", "🌍 Geopolitica & Radar", "🤖 AI Chatbot", "📚 Academy"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏛️ Macro & ETF", "⚡ Crypto Pro", "🌍 Geopolitica", "🤖 AI Chatbot", "📚 Academy"])
 
 # ----------------- SCHEDA 1 (Macro & ETF) -----------------
 with tab1:
@@ -235,104 +263,48 @@ with tab2:
 # ----------------- SCHEDA 3 (Geopolitica & Radar) -----------------
 with tab3:
     st.header("🌍 Geopolitical Intelligence & Risk Radar")
-    st.write("Analisi semantica e posizionamento geografico delle tensioni globali.")
-    
     col_g1, col_g2, col_g3 = st.columns([1.5, 1, 1])
-    
     with col_g1:
         st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=tension_index, title={'text': "Indice di Tensione Globale"}, gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [40, 60], 'color': "#ffb74d"}, {'range': [60, 100], 'color': "#e57373"}]})).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
-        
     with col_g2:
         st.subheader("🗺️ Regional Hotspots")
-        st.write("Menzioni nei feed (ultime 24h):")
-        for region, count in region_scores.items():
-            st.metric(region, f"{count} news", delta="🔥 Caldo" if count >= 2 else "Calmo", delta_color="inverse" if count >= 2 else "normal")
-
+        for region, count in region_scores.items(): st.metric(region, f"{count} news", delta="🔥 Caldo" if count >= 2 else "Calmo", delta_color="inverse" if count >= 2 else "normal")
     with col_g3:
-        st.subheader("🛢️ Reality Check (Beni Rifugio)")
-        st.write("Il mercato sta prezzando la paura?")
-        st.metric("VIX (Indice Paura)", f"{current['VIX']:.1f}", help="> 20 = Nervosismo, > 30 = Panico")
+        st.subheader("🛢️ Reality Check")
         st.metric("Trend Oro (Z-Score)", f"{current['Z_Oro']:.2f}", delta="Risk-Off" if current['Z_Oro'] > 1 else "Neutro")
-        st.metric("Trend Petrolio (Z-Score)", f"{current['Z_Petrolio']:.2f}", delta="Shock Supply" if current['Z_Petrolio'] > 1 else "Normale")
 
     st.markdown("---")
-    st.subheader("📰 Ultime Notizie Analizzate")
     if top_news:
-        for item in top_news:
-            badge = "🔴 Tension/Risk" if item['score'] > 0 else "🟢 Peace/Deal" if item['score'] < 0 else "⚪ Neutrale"
-            st.markdown(f"- **[{badge}]** [{item['titolo']}]({item['link']})")
-    else:
-        st.info("Nessuna notizia ad alta priorità rilevata.")
+        for item in top_news: st.markdown(f"- **[{'🔴 Tension' if item['score'] > 0 else '🟢 Peace'}]** [{item['titolo']}]({item['link']})")
 
-# ----------------- SCHEDA 4 (AI Chatbot - Auto-Discovery Definitivo) -----------------
+# ----------------- SCHEDA 4 (AI Chatbot) -----------------
 with tab4:
     st.header("🤖 Quant AI Assistant")
-    
     if "GEMINI_API_KEY" in st.secrets:
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            modelli_disponibili = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            target_model = next((m for m in modelli_disponibili if "flash" in m.lower() or "pro" in m.lower()), modelli_disponibili[0])
+            model = genai.GenerativeModel(target_model)
             
-            # 1. AUTO-DISCOVERY: Chiediamo a Google quali modelli possiamo usare
-            modelli_disponibili = []
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    modelli_disponibili.append(m.name)
+            if "chat_history" not in st.session_state: st.session_state.chat_history = []
+            for m in st.session_state.chat_history: st.chat_message("user" if m["role"]=="user" else "assistant").markdown(m["content"])
             
-            if not modelli_disponibili:
-                st.error("❌ La tua API Key non ha accesso a nessun modello di testo. Controlla il tuo account Google AI Studio.")
-            else:
-                # Mostriamo un piccolo menu a tendina per farti vedere i modelli sbloccati
-                with st.expander("🛠️ Debug: Modelli sbloccati dalla tua API Key", expanded=False):
-                    st.write(modelli_disponibili)
-                
-                # 2. SELEZIONE DINAMICA: Prendiamo il miglior modello disponibile
-                target_model = modelli_disponibili[0] # Fallback di sicurezza (prende il primo della lista)
-                for m in modelli_disponibili:
-                    if "flash" in m.lower() or "pro" in m.lower():
-                        target_model = m
-                        break # Prende il primo modello "flash" o "pro" che trova nella tua lista personale
-                        
-                st.success(f"✅ Connessione stabilita. Modello in uso: **{target_model.replace('models/', '')}**")
-                
-                # Inizializziamo il modello esatto trovato
-                model = genai.GenerativeModel(target_model)
-                
-                if "chat_history" not in st.session_state: 
-                    st.session_state.chat_history = []
-                    
-                for m in st.session_state.chat_history: 
-                    st.chat_message("user" if m["role"]=="user" else "assistant").markdown(m["content"])
-                    
-                if prompt := st.chat_input("Chiedimi un'analisi sul portafoglio o sui mercati..."):
-                    st.session_state.chat_history.append({"role": "user", "content": prompt})
-                    st.chat_message("user").markdown(prompt)
-                    
-                    with st.spinner("Analisi dei dati Macro e Crypto in corso..."):
-                        try:
-                            # Iniettiamo i dati live + la domanda dell'utente
-                            response = model.generate_content(f"{ai_context}\n\nDomanda dell'utente: {prompt}")
-                            st.chat_message("assistant").markdown(response.text)
-                            st.session_state.chat_history.append({"role": "assistant", "content": response.text})
-                        except Exception as e:
-                            st.error(f"Errore durante la generazione della risposta: {e}")
-                            
-        except Exception as e: 
-            st.error(f"Errore di comunicazione con Google API: {e}")
-    else:
-        st.warning("⚠️ Chiave API non trovata. Controlla i secrets di Streamlit.")
+            if prompt := st.chat_input("Chiedimi un'analisi sul portafoglio..."):
+                st.session_state.chat_history.append({"role": "user", "content": prompt})
+                st.chat_message("user").markdown(prompt)
+                with st.spinner("Analisi AI in corso..."):
+                    response = model.generate_content(f"{ai_context}\n\nDomanda: {prompt}")
+                    st.chat_message("assistant").markdown(response.text)
+                    st.session_state.chat_history.append({"role": "assistant", "content": response.text})
+        except Exception as e: st.error(f"Errore API: {e}")
+    else: st.warning("⚠️ Inserisci la chiave API nei secrets.")
 
 # ----------------- SCHEDA 5 (Academy Educativa) -----------------
 with tab5:
     st.header("📚 Macro Academy")
-    st.write("Benvenuto nella sezione formativa. Clicca sui moduli qui sotto per comprendere le logiche che muovono i mercati.")
-
-    with st.expander("🌍 1. Macroeconomia & Banche Centrali"):
-        st.markdown("**Che cos'è la Macroeconomia?**\nÈ lo studio del comportamento dell'economia nel suo complesso (inflazione, disoccupazione, crescita). Il vero 'burattinaio' dei mercati è la **Banca Centrale**.\n\n**La Regola d'Oro dei Tassi di Interesse:**\n* Se l'inflazione sale troppo, la Banca Centrale **alza i tassi di interesse** -> *Il mercato azionario scende (Risk-Off).*\n* Quando l'economia frena, la Banca Centrale **taglia i tassi**. Il denaro costa poco -> *Il mercato azionario sale per i soldi facili (Risk-On).*")
-    with st.expander("📈 2. Azioni & Rotazione Settoriale"):
-        st.markdown("**Cos'è la Rotazione Settoriale?**\nI soldi nei mercati non dormono mai, si spostano in base al ciclo economico:\n* **Settori Ciclici (Tech, Beni di Lusso):** Vanno benissimo quando l'economia cresce.\n* **Settori Difensivi (Salute, Utilities):** Vanno bene durante le recessioni.")
-    with st.expander("🏛️ 3. Obbligazioni (Bonds) & Curva dei Rendimenti"):
-        st.markdown("**Il Segreto della Curva dei Rendimenti:**\nSe presti soldi a breve termine (2 anni) e ricevi un interesse più alto rispetto a prestarli a lungo termine (10 anni), la curva si **Inverte**. Questo succede perché gli investitori sono in preda al panico nel breve termine: storicamente anticipa quasi sempre una **Recessione**.")
-    with st.expander("💱 4. Forex, Dollaro (DXY) e Oro"):
-        st.markdown("**Relazioni importanti:**\n* Il Dollaro è il 'Bene Rifugio' mondiale. Se c'è panico, tutti comprano dollari e il DXY sale.\n* Se il Dollaro sale in modo aggressivo, di solito le Azioni e le Crypto scendono.\n* L'**Oro** è l'altro grande bene rifugio contro la svalutazione.")
-    with st.expander("⚡ 5. Criptovalute, Bitcoin e Altcoins"):
-        st.markdown("**L'Altcoin Season:**\nIl mercato Crypto segue un flusso ciclico:\n1. I capitali entrano nel bene più sicuro: **Bitcoin**.\n2. I profitti vengono spostati su **Ethereum**.\n3. Poi si scende alle **Layer 1** (Solana, Avalanche).\n4. Infine si arriva alla mania pura (**Memecoin**).")
+    with st.expander("🌍 1. Macroeconomia & Banche Centrali"): st.markdown("**Che cos'è la Macroeconomia?**\nStudio del comportamento dell'economia nel suo complesso. Il vero 'burattinaio' dei mercati è la **Banca Centrale**.\n\n**La Regola d'Oro:**\n* Se l'inflazione sale, la Banca **alza i tassi** -> *Azioni scendono (Risk-Off).*\n* Quando c'è crisi, la Banca **taglia i tassi** -> *Azioni salgono (Risk-On).*")
+    with st.expander("📈 2. Rotazione Settoriale"): st.markdown("**Cos'è?** I capitali si spostano in base al ciclo:\n* **Ciclici (Tech, Beni di Lusso):** Vanno bene quando l'economia cresce.\n* **Difensivi (Salute, Utilities):** Vanno bene durante le recessioni.")
+    with st.expander("🏛️ 3. Curva dei Rendimenti"): st.markdown("Se presti soldi a breve termine (2 anni) e ricevi un interesse più alto rispetto al lungo termine (10 anni), la curva si **Inverte**. Questo panico di breve termine anticipa storicamente una **Recessione**.")
+    with st.expander("💱 4. Dollaro e Oro"): st.markdown("* Il **Dollaro** è il bene rifugio mondiale. Se c'è panico, il DXY sale e le Azioni scendono.\n* L'**Oro** protegge dalla svalutazione e dai disastri geopolitici.")
+    with st.expander("⚡ 5. Il Ciclo Crypto"): st.markdown("Il mercato Crypto segue un flusso ciclico:\n1. I capitali entrano in **Bitcoin**.\n2. I profitti vengono spostati su **Ethereum**.\n3. Poi sulle **Layer 1** (Solana, Avalanche).\n4. Infine la mania delle **Memecoin** segnala la fine della bolla.")
