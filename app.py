@@ -106,7 +106,6 @@ def analyze_geopolitics():
 # --- INTERFACCIA E CARICAMENTO ---
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
 
-# Esportazione Excel
 def to_excel(df):
     output = BytesIO()
     writer = pd.ExcelWriter(output, engine='xlsxwriter')
@@ -141,7 +140,7 @@ Sei un analista quantitativo esperto. I dati di mercato correnti:
 - Indice Geopolitico (0-100, >60 è rischio): {tension_index}
 - Prezzo Bitcoin: ${current['Bitcoin']:.0f}
 - Bitcoin Mayer Multiple (<1 accumulo, >2 bolla): {current['Mayer_BTC']:.2f}
-Rispondi in modo conciso basandoti su questi dati per consigliare asset allocation.
+Rispondi in modo conciso basandoti su questi dati per consigliare asset allocation. Non usare formattazioni complesse.
 """
 
 # --- SCHEDE ---
@@ -219,29 +218,49 @@ with tab4:
     if "GEMINI_API_KEY" not in st.secrets:
         st.warning("⚠️ Manca la GEMINI_API_KEY nei Secrets di Streamlit! Inseriscila per usare la chat.")
     else:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # Usiamo gemini-pro che non ha problemi di versione
-        model = genai.GenerativeModel('gemini-pro')
+        try:
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            
+            # --- AUTO-DISCOVERY DEL MODELLO ---
+            # Chiediamo alle API quali modelli generativi la tua chiave può effettivamente usare
+            modelli_validi = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            
+            if not modelli_validi:
+                st.error("Nessun modello disponibile per questa API Key. Controlla Google AI Studio.")
+            else:
+                # Scegliamo il primo modello disponibile (es. models/gemini-1.5-flash)
+                modello_scelto = modelli_validi[0]
+                # Preferiamo i modelli moderni se presenti nella lista
+                for m in modelli_validi:
+                    if "1.5-flash" in m:
+                        modello_scelto = m
+                        break
+                        
+                model = genai.GenerativeModel(modello_scelto)
 
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
+                if "chat_history" not in st.session_state:
+                    st.session_state.chat_history = []
 
-        for message in st.session_state.chat_history:
-            if message["role"] != "system":
-                with st.chat_message("user" if message["role"] == "user" else "assistant"):
-                    st.markdown(message["content"])
+                for message in st.session_state.chat_history:
+                    if message["role"] != "system":
+                        with st.chat_message("user" if message["role"] == "user" else "assistant"):
+                            st.markdown(message["content"])
 
-        if prompt := st.chat_input("Chiedimi un parere sull'allocazione attuale..."):
-            st.session_state.chat_history.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+                if prompt := st.chat_input("Chiedimi un parere sull'allocazione attuale..."):
+                    st.session_state.chat_history.append({"role": "user", "content": prompt})
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
 
-            with st.spinner("Analisi AI in corso..."):
-                try:
-                    full_prompt = f"{ai_context}\n\nDomanda dell'utente: {prompt}"
-                    response = model.generate_content(full_prompt)
-                    with st.chat_message("assistant"):
-                        st.markdown(response.text)
-                    st.session_state.chat_history.append({"role": "assistant", "content": response.text})
-                except Exception as e:
-                    st.error(f"Errore API: {e}")
+                    # Mostriamo quale modello l'Auto-Discovery ha pescato!
+                    nome_pulito = modello_scelto.replace("models/", "")
+                    with st.spinner(f"Analisi AI in corso (Modello: {nome_pulito})..."):
+                        try:
+                            full_prompt = f"{ai_context}\n\nDomanda dell'utente: {prompt}"
+                            response = model.generate_content(full_prompt)
+                            with st.chat_message("assistant"):
+                                st.markdown(response.text)
+                            st.session_state.chat_history.append({"role": "assistant", "content": response.text})
+                        except Exception as e:
+                            st.error(f"Errore di generazione: {e}")
+        except Exception as e:
+            st.error(f"Errore di connessione alle API: {e}")
