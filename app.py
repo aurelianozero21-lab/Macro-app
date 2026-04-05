@@ -17,14 +17,14 @@ with st.expander("📚 Legenda e Glossario Rapido"):
     st.markdown("""
     * **Z-Score:** Misura se un asset è in trend positivo (> 0) o negativo (< 0).
     * **Curva Rendimenti:** Se Invertita (< 0) segnala recessione. 
-    * **Mayer Multiple:** Prezzo diviso per la media a 200 giorni. < 1.0 = Accumulo. > 2.4 = Bolla.
-    * **Crypto Fear & Greed:** Misura il sentiment crypto da 0 (Panico) a 100 (Euforia).
+    * **Mayer Multiple:** Prezzo BTC diviso per la media a 200 giorni. < 1.0 = Accumulo. > 2.4 = Bolla.
+    * **VIX (Indice della Paura):** Sopra 20 c'è nervosismo, sopra 30 c'è panico, sotto 15 c'è compiacenza.
     """)
 
-# --- 1. MOTORE DATI MACRO ---
+# --- 1. MOTORE DATI MACRO (Aggiunti VIX e Petrolio) ---
 @st.cache_data(ttl=3600)
 def load_all_data(api_key, lookback):
-    assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX'}
+    assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Petrolio': 'CL=F', 'Treasury 10Y': '^TNX', 'VIX': '^VIX'}
     df = pd.DataFrame()
     for name, ticker in assets.items():
         hist = yf.Ticker(ticker).history(period="15y")
@@ -50,7 +50,7 @@ def load_all_data(api_key, lookback):
     df['YieldCurve'] = yc
     df = df.ffill().dropna()
     
-    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin']:
+    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Petrolio', 'Treasury 10Y', 'VIX', 'Bitcoin']:
         df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
@@ -106,15 +106,44 @@ def get_crypto_fgi():
             return int(data['data'][0]['value']), data['data'][0]['value_classification']
     except: return 50, "Neutral"
 
-# --- 4. MOTORE GEOPOLITICO E NEWS ---
+# --- 4. MOTORE GEOPOLITICO (Aggiornato con Regional Tracking) ---
 @st.cache_data(ttl=1800)
 def analyze_geopolitics():
     url = "https://news.google.com/rss/search?q=geopolitics+OR+sanctions+OR+conflict+OR+economy+markets&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
-    if not feed.entries: return 50, []
-    risk_words, peace_words = ['war', 'strike', 'tariff', 'sanction', 'missile', 'tension'], ['peace', 'deal', 'agreement', 'ceasefire', 'talks']
-    score = sum(sum(1 for w in risk_words if w in e.title.lower()) - sum(1 for w in peace_words if w in e.title.lower()) for e in feed.entries[:25])
-    return max(0, min(100, 50 + (score * 4))), []
+    
+    if not feed.entries: return 50, [], {}
+        
+    risk_words = ['war', 'strike', 'tariff', 'sanction', 'missile', 'tension', 'conflict', 'invasion']
+    peace_words = ['peace', 'deal', 'agreement', 'ceasefire', 'talks']
+    
+    regions = {
+        'Medio Oriente': ['israel', 'iran', 'gaza', 'yemen', 'saudi', 'lebanon', 'middle east'],
+        'Est Europa': ['russia', 'ukraine', 'putin', 'nato', 'moscow', 'kiev'],
+        'Asia-Pacifico': ['china', 'taiwan', 'beijing', 'xi', 'korea', 'asia']
+    }
+    
+    region_scores = {'Medio Oriente': 0, 'Est Europa': 0, 'Asia-Pacifico': 0}
+    score_totale = 0
+    news_items = []
+    
+    for entry in feed.entries[:25]:
+        titolo = entry.title.lower()
+        
+        # Calcolo sentiment
+        item_score = sum(1 for w in risk_words if w in titolo) - sum(1 for w in peace_words if w in titolo)
+        score_totale += item_score
+        
+        # Scansione Regionale
+        for region, keywords in regions.items():
+            if any(kw in titolo for kw in keywords):
+                region_scores[region] += 1
+                
+        if item_score != 0 and len(news_items) < 8:
+            news_items.append({'titolo': entry.title, 'link': entry.link, 'score': item_score})
+            
+    tension_index = max(0, min(100, 50 + (score_totale * 4)))
+    return tension_index, news_items, region_scores
 
 # --- INTERFACCIA E CARICAMENTO ---
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
@@ -132,7 +161,7 @@ with st.spinner("📊 Inizializzazione Motori Quantitativi..."):
         df_etfs = get_etf_screener()
         df_crypto = get_crypto_screener()
         fgi_val, fgi_class = get_crypto_fgi()
-        tension_index, top_news = analyze_geopolitics()
+        tension_index, top_news, region_scores = analyze_geopolitics()
     except Exception as e:
         st.error(f"Errore caricamento dati base: {e}")
         st.stop()
@@ -147,11 +176,10 @@ def calcola_fase_avanzata(yc, z_sp500, tension):
     else: return '3. Espansione (Risk-On)'
 
 fase_attuale = calcola_fase_avanzata(current['YieldCurve'], current['Z_S&P 500'], tension_index)
+ai_context = f"Dati live: Fase {fase_attuale}, S&P500 Z:{current['Z_S&P 500']:.2f}, Geopolitica:{tension_index}, BTC:${current['Bitcoin']:.0f}, Crypto FGI: {fgi_val}."
 
-ai_context = f"Dati live: Fase {fase_attuale}, S&P500 Z:{current['Z_S&P 500']:.2f}, Geopolitica:{tension_index}, BTC:${current['Bitcoin']:.0f}, BTC Mayer:{current['Mayer_BTC']:.2f}, Crypto FGI: {fgi_val}."
-
-# --- SCHEDE COMPLETA: ORA SONO 5! ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏛️ Macro & ETF", "⚡ Crypto Pro", "🌍 Geopolitica", "🤖 AI Chatbot", "📚 Academy"])
+# --- SCHEDE ---
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏛️ Macro & ETF", "⚡ Crypto Pro", "🌍 Geopolitica & Radar", "🤖 AI Chatbot", "📚 Academy"])
 
 # ----------------- SCHEDA 1 (Macro & ETF) -----------------
 with tab1:
@@ -204,16 +232,37 @@ with tab2:
     if not df_crypto.empty:
         st.plotly_chart(px.bar(df_crypto, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Altcoin Rotation (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
 
-# ----------------- SCHEDA 3 (Geopolitica) -----------------
+# ----------------- SCHEDA 3 (Geopolitica & Radar) -----------------
 with tab3:
-    st.header("🌍 Geopolitical News Scanner")
-    col_g1, col_g2 = st.columns([1, 1])
+    st.header("🌍 Geopolitical Intelligence & Risk Radar")
+    st.write("Analisi semantica e posizionamento geografico delle tensioni globali.")
+    
+    col_g1, col_g2, col_g3 = st.columns([1.5, 1, 1])
+    
     with col_g1:
-        if tension_index < 40: st.success("🟢 **Stato: Distensione**")
-        elif tension_index <= 60: st.warning("🟡 **Stato: Tensione Normale**")
-        else: st.error("🔴 **Stato: Allarme Geopolitico**")
+        st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=tension_index, title={'text': "Indice di Tensione Globale"}, gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [40, 60], 'color': "#ffb74d"}, {'range': [60, 100], 'color': "#e57373"}]})).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
+        
     with col_g2:
-        st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=tension_index, title={'text': "Indice Tensione"}, gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 40], 'color': "#81c784"}, {'range': [60, 100], 'color': "#e57373"}]})).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
+        st.subheader("🗺️ Regional Hotspots")
+        st.write("Menzioni nei feed (ultime 24h):")
+        for region, count in region_scores.items():
+            st.metric(region, f"{count} news", delta="🔥 Caldo" if count >= 2 else "Calmo", delta_color="inverse" if count >= 2 else "normal")
+
+    with col_g3:
+        st.subheader("🛢️ Reality Check (Beni Rifugio)")
+        st.write("Il mercato sta prezzando la paura?")
+        st.metric("VIX (Indice Paura)", f"{current['VIX']:.1f}", help="> 20 = Nervosismo, > 30 = Panico")
+        st.metric("Trend Oro (Z-Score)", f"{current['Z_Oro']:.2f}", delta="Risk-Off" if current['Z_Oro'] > 1 else "Neutro")
+        st.metric("Trend Petrolio (Z-Score)", f"{current['Z_Petrolio']:.2f}", delta="Shock Supply" if current['Z_Petrolio'] > 1 else "Normale")
+
+    st.markdown("---")
+    st.subheader("📰 Ultime Notizie Analizzate")
+    if top_news:
+        for item in top_news:
+            badge = "🔴 Tension/Risk" if item['score'] > 0 else "🟢 Peace/Deal" if item['score'] < 0 else "⚪ Neutrale"
+            st.markdown(f"- **[{badge}]** [{item['titolo']}]({item['link']})")
+    else:
+        st.info("Nessuna notizia ad alta priorità rilevata.")
 
 # ----------------- SCHEDA 4 (AI Chatbot) -----------------
 with tab4:
@@ -236,60 +285,15 @@ with tab4:
 # ----------------- SCHEDA 5 (Academy Educativa) -----------------
 with tab5:
     st.header("📚 Macro Academy")
-    st.write("Benvenuto nella sezione formativa. Clicca sui moduli qui sotto per comprendere le logiche che muovono i mercati globali e la nostra dashboard.")
+    st.write("Benvenuto nella sezione formativa. Clicca sui moduli qui sotto per comprendere le logiche che muovono i mercati.")
 
     with st.expander("🌍 1. Macroeconomia & Banche Centrali"):
-        st.markdown("""
-        **Che cos'è la Macroeconomia?**
-        È lo studio del comportamento dell'economia nel suo complesso (inflazione, disoccupazione, crescita). Il vero "burattinaio" dei mercati è la **Banca Centrale** (es. la FED in USA o la BCE in Europa).
-        
-        **La Regola d'Oro dei Tassi di Interesse:**
-        * Se l'inflazione sale troppo, la Banca Centrale **alza i tassi di interesse** per raffreddare l'economia. Il denaro costa di più, i mutui salgono, le aziende investono meno -> *Il mercato azionario scende (Risk-Off).*
-        * Quando l'economia frena o c'è crisi, la Banca Centrale **taglia i tassi**. Il denaro costa poco -> *Il mercato azionario sale per i soldi facili (Risk-On).*
-        """)
-
+        st.markdown("**Che cos'è la Macroeconomia?**\nÈ lo studio del comportamento dell'economia nel suo complesso (inflazione, disoccupazione, crescita). Il vero 'burattinaio' dei mercati è la **Banca Centrale**.\n\n**La Regola d'Oro dei Tassi di Interesse:**\n* Se l'inflazione sale troppo, la Banca Centrale **alza i tassi di interesse** -> *Il mercato azionario scende (Risk-Off).*\n* Quando l'economia frena, la Banca Centrale **taglia i tassi**. Il denaro costa poco -> *Il mercato azionario sale per i soldi facili (Risk-On).*")
     with st.expander("📈 2. Azioni & Rotazione Settoriale"):
-        st.markdown("""
-        **Cosa sono le Azioni?**
-        Comprare un'azione significa comprare una piccola parte di un'azienda vera e propria.
-        
-        **Cos'è la Rotazione Settoriale?**
-        I soldi nei mercati non dormono mai, si spostano in base al ciclo economico:
-        * **Settori Ciclici (Tech, Beni di Lusso):** Vanno benissimo quando l'economia cresce forte e la gente spende.
-        * **Settori Difensivi (Salute, Utilities, Cibo):** Vanno bene durante le recessioni. Anche se c'è crisi, la gente deve comprare medicine e pagare la bolletta della luce.
-        * L'abilità sta nello spostare (ruotare) i propri investimenti nel settore giusto *prima* che il ciclo cambi.
-        """)
-
+        st.markdown("**Cos'è la Rotazione Settoriale?**\nI soldi nei mercati non dormono mai, si spostano in base al ciclo economico:\n* **Settori Ciclici (Tech, Beni di Lusso):** Vanno benissimo quando l'economia cresce.\n* **Settori Difensivi (Salute, Utilities):** Vanno bene durante le recessioni.")
     with st.expander("🏛️ 3. Obbligazioni (Bonds) & Curva dei Rendimenti"):
-        st.markdown("""
-        **Cosa sono le Obbligazioni?**
-        A differenza delle azioni, un'obbligazione è un prestito che tu fai a uno Stato (es. BTP italiani o Treasury americani) o a un'azienda in cambio di interessi fissi.
-        
-        **Il Segreto della Curva dei Rendimenti:**
-        Normalmente, se presti soldi per 10 anni pretendi un interesse più alto rispetto a prestarli per 2 anni (perché il rischio è maggiore). 
-        Se però l'interesse a 2 anni supera quello a 10 anni, la curva si **Inverte** (valore negativo). Questo succede perché gli investitori sono in preda al panico nel breve termine: storicamente anticipa quasi sempre una **Recessione**.
-        """)
-
+        st.markdown("**Il Segreto della Curva dei Rendimenti:**\nSe presti soldi a breve termine (2 anni) e ricevi un interesse più alto rispetto a prestarli a lungo termine (10 anni), la curva si **Inverte**. Questo succede perché gli investitori sono in preda al panico nel breve termine: storicamente anticipa quasi sempre una **Recessione**.")
     with st.expander("💱 4. Forex, Dollaro (DXY) e Oro"):
-        st.markdown("""
-        **Il Forex e l'Indice DXY:**
-        Il Forex è il mercato dove si scambiano le valute. L'indice DXY misura la forza del **Dollaro Statunitense** contro le altre monete.
-        
-        **Relazioni importanti:**
-        * Il Dollaro è il "Bene Rifugio" mondiale. Se c'è panico o guerra, tutti comprano dollari e il DXY sale.
-        * **Equazione base:** Se il Dollaro DXY sale in modo aggressivo, di solito le Azioni e le Crypto scendono.
-        * L'**Oro** è l'altro grande bene rifugio: protegge l'investitore dalla svalutazione del denaro e dalle catastrofi geopolitiche.
-        """)
-
+        st.markdown("**Relazioni importanti:**\n* Il Dollaro è il 'Bene Rifugio' mondiale. Se c'è panico, tutti comprano dollari e il DXY sale.\n* Se il Dollaro sale in modo aggressivo, di solito le Azioni e le Crypto scendono.\n* L'**Oro** è l'altro grande bene rifugio contro la svalutazione.")
     with st.expander("⚡ 5. Criptovalute, Bitcoin e Altcoins"):
-        st.markdown("""
-        **Bitcoin come "Oro Digitale":**
-        Bitcoin (BTC) non è un'azienda e non produce utili. È un bene scarso (ce ne saranno solo 21 milioni) il cui prezzo dipende dalla domanda, dall'offerta e dalla liquidità immessa nel sistema dalle banche centrali.
-        
-        **L'Altcoin Season:**
-        Il mercato Crypto segue un flusso ciclico di avidità:
-        1. I capitali istituzionali entrano nel bene più sicuro: **Bitcoin**.
-        2. Quando Bitcoin ha guadagnato troppo, i profitti vengono spostati su **Ethereum**.
-        3. Poi si scende alle **Layer 1** più veloci e rischiose (Solana, Avalanche).
-        4. Infine si arriva alla mania pura (**Memecoin**). Quando questo accade, la bolla di solito sta per esplodere.
-        """)
+        st.markdown("**L'Altcoin Season:**\nIl mercato Crypto segue un flusso ciclico:\n1. I capitali entrano nel bene più sicuro: **Bitcoin**.\n2. I profitti vengono spostati su **Ethereum**.\n3. Poi si scende alle **Layer 1** (Solana, Avalanche).\n4. Infine si arriva alla mania pura (**Memecoin**).")
