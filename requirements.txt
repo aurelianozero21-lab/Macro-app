@@ -6,3 +6,4 @@ fredapi
 feedparser
 xlsxwriter
 google-generativeai
+requests
