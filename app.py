@@ -179,47 +179,51 @@ if st.session_state.morning_brief:
         st.markdown(st.session_state.morning_brief)
         st.download_button("💾 Scarica (.md)", data=st.session_state.morning_brief, file_name=f"Brief_{datetime.now().strftime('%Y%m%d')}.md")
 
-# --- NUOVO MODULO SIDEBAR: TELEGRAM ALERTS (SAAS UX RIPARATA) ---
+# --- NUOVO MODULO SIDEBAR: TELEGRAM STRATEGICO ---
 st.sidebar.markdown("---")
-st.sidebar.subheader("🔔 Alert su Telegram")
+st.sidebar.subheader("🔔 Strategia Quotidiana su Telegram")
 
-allerte_attive = []
-if "1." in fase_attuale: allerte_attive.append("🚨 *MACRO:* FASE 1 - Allarme Rosso (Risk-Off).")
-if current['VIX'] > 25: allerte_attive.append(f"😱 *VIX:* Alta volatilità rilevata ({current['VIX']:.1f}).")
-if current['Z_S&P 500'] > 0 and current['Z_High Yield'] < 0: allerte_attive.append("⚠️ *SMART MONEY:* Divergenza ribassista su HYG.")
-if fgi_val <= 25: allerte_attive.append(f"❄️ *CRYPTO:* Paura Estrema ({fgi_val}/100).")
+with st.sidebar.expander("📲 Configura Ricezione"):
+    st.markdown("Imposta per ricevere la strategia d'investimento sul tuo smartphone.")
+    bot_url = st.secrets.get("TG_BOT_URL", "https://t.me/Inserisci_Qui_Il_Tuo_Bot")
+    st.markdown(f"1. Apri il nostro Bot Ufficiale cliccando [👉 QUI]({bot_url}) e premi **Avvia**.")
+    st.markdown("2. Clicca [👉 QUI](https://t.me/getmyid_bot) per ottenere il tuo codice ID.")
+    tg_chat = st.text_input("3. Incolla il tuo ID qui:")
 
-if not allerte_attive:
-    st.sidebar.success("✅ Nessuna anomalia critica rilevata.")
-else:
-    for al in allerte_attive:
-        st.sidebar.error(al.replace("*", ""))
-        
-    with st.sidebar.expander("📲 Ricevi Alert (Client Mode)"):
-        st.markdown("Ricevi queste notifiche direttamente sul tuo telefono.")
-        bot_url = st.secrets.get("TG_BOT_URL", "https://t.me/Inserisci_Qui_Il_Tuo_Bot")
-        st.markdown(f"**Passo 1:** Apri il nostro Bot Ufficiale cliccando [👉 QUI]({bot_url}) e premi **Avvia** (fondamentale per l'anti-spam).")
-        st.markdown("**Passo 2:** Clicca [👉 QUI](https://t.me/getmyid_bot) per ottenere il tuo codice ID numerico.")
-        
-        tg_chat = st.text_input("Passo 3: Incolla il tuo ID qui:")
-        
-        if st.button("🔔 Attiva Notifiche", use_container_width=True):
-            if "TG_TOKEN" in st.secrets:
-                if tg_chat:
-                    messaggio = f"📊 *Macro Dashboard - Alert*\n{datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n" + "\n".join(allerte_attive)
+if st.sidebar.button("🚀 Richiedi Strategia ORA", use_container_width=True):
+    if "TG_TOKEN" in st.secrets and "GEMINI_API_KEY" in st.secrets:
+        if tg_chat:
+            with st.sidebar.status("🤖 L'AI sta formulando la strategia..."):
+                try:
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    modelli = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                    target_model = next((m for m in modelli if "flash" in m.lower() or "pro" in m.lower()), modelli[0])
+                    model = genai.GenerativeModel(target_model)
+                    
+                    prompt_alert = f"""
+                    Analizza i seguenti dati macroeconomici live: {ai_context}.
+                    Sei un gestore di portafoglio. Scrivi un messaggio Telegram diretto, chiaro e formattato bene (usa bold e liste).
+                    Struttura il messaggio così:
+                    - 🚥 Stato Attuale dei Mercati (sintesi)
+                    - 🎯 Breve Termine (1 mese): Dove conviene investire ora.
+                    - 📅 Medio Termine (6-12 mesi): Posizionamento consigliato.
+                    - 🔭 Lungo Termine (1-3 anni): Settori o asset su cui accumulare.
+                    """
+                    report_ai = model.generate_content(prompt_alert).text
+                    
+                    messaggio = f"📊 *Strategia Macro Quantitativa*\n{datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n{report_ai}"
                     url = f"https://api.telegram.org/bot{st.secrets['TG_TOKEN']}/sendMessage"
-                    try:
-                        res = requests.post(url, json={"chat_id": tg_chat, "text": messaggio, "parse_mode": "Markdown"})
-                        if res.status_code == 200:
-                            st.success("✅ Alert inviato con successo al tuo telefono!")
-                        else:
-                            st.error(f"❌ Errore (Codice {res.status_code}): Il bot non può scriverti. Assicurati di aver eseguito il Passo 1 per sbloccare l'anti-spam!")
-                    except Exception as e:
-                        st.error(f"Errore di rete: {e}")
-                else:
-                    st.warning("Inserisci il tuo ID Telegram prima di attivare.")
-            else:
-                st.error("⚠️ Errore di Sistema: L'amministratore non ha configurato il Bot Ufficiale (TG_TOKEN mancante).")
+                    res = requests.post(url, json={"chat_id": tg_chat, "text": messaggio, "parse_mode": "Markdown"})
+                    if res.status_code == 200:
+                        st.sidebar.success("✅ Strategia inviata su Telegram!")
+                    else:
+                        st.sidebar.error("❌ Errore di invio. Hai premuto 'Avvia' sul bot?")
+                except Exception as e:
+                    st.sidebar.error(f"Errore di generazione: {e}")
+        else:
+            st.sidebar.warning("Inserisci il tuo ID Telegram (Passo 3).")
+    else:
+        st.sidebar.error("⚠️ Configurazione incompleta. Mancano GEMINI_API_KEY o TG_TOKEN nei secrets.")
 
 # --- SCHEDE ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro", "⚡ Crypto", "🌍 Geopolitica", "🔥 Stress Test", "🤖 AI Chatbot", "📚 Academy"])
@@ -376,3 +380,5 @@ with tab6:
     with st.expander("🏛️ 3. Curva dei Rendimenti"): st.markdown("Se i tassi a breve termine superano quelli a lungo termine, c'è panico nel presente. Segnala quasi sempre una **Recessione** in arrivo.")
     with st.expander("💱 4. Dollaro e Oro"): st.markdown("Il **Dollaro (DXY)** è il bene rifugio. Se c'è panico, sale e le Azioni scendono. L'**Oro** protegge da svalutazione e disastri geopolitici.")
     with st.expander("👁️ 5. Smart Money e Divergenze"): st.markdown("I piccoli investitori (retail) guardano i prezzi. I grandi fondi (Smart Money) guardano il mercato del Credito (Obbligazioni Corporate / HYG). Se le azioni salgono ma l'HYG scende, significa che le banche stanno segretamente vendendo rischio.")
+``` Chiedimi di modificare o eliminare la tua azione programmata in qualsiasi momento. Quando la tua azione programmata è pronta, un punto comparirà accanto a questa chat in Recenti.
+http://googleusercontent.com/task_confirmation_content/0
