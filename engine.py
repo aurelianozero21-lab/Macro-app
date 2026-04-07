@@ -19,6 +19,7 @@ def init_supabase():
 
 @st.cache_data(ttl=60)
 def get_live_prices():
+    # Aggiunto ticker per monitoraggio live
     tickers = ['^GSPC', 'BTC-USD', 'GC=F', '^VIX', 'CL=F']
     prices = {}
     for t in tickers:
@@ -31,7 +32,7 @@ def get_live_prices():
 
 @st.cache_data(ttl=3600)
 def load_all_data(api_key, lookback):
-    # Aggiunto 'Bond ETF' (IEF) per backtest reale obbligazionario
+    # Assets core per analisi e backtest
     assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX', 'High Yield': 'HYG', 'VIX': '^VIX', 'Bond ETF': 'IEF'}
     df = pd.DataFrame()
     for name, ticker in assets.items():
@@ -40,6 +41,7 @@ def load_all_data(api_key, lookback):
             hist.index = pd.to_datetime(hist.index).tz_localize(None).normalize()
             df[name] = hist['Close']
             
+    # Dati Bitcoin
     btc_hist = yf.Ticker('BTC-USD').history(period="15y")
     btc_hist.index = pd.to_datetime(btc_hist.index).tz_localize(None).normalize()
     df['Bitcoin'] = btc_hist['Close']
@@ -48,25 +50,34 @@ def load_all_data(api_key, lookback):
     df['BTC_200DMA'] = df['Bitcoin'].rolling(window=200).mean()
     df['Mayer_BTC'] = df['Bitcoin'] / df['BTC_200DMA']
     
+    # RSI Bitcoin
     delta_btc = df['Bitcoin'].diff()
     rs_btc = (delta_btc.where(delta_btc > 0, 0)).rolling(window=14).mean() / (-delta_btc.where(delta_btc < 0, 0)).rolling(window=14).mean()
     df['RSI_BTC'] = 100 - (100 / (1 + rs_btc))
     
+    # Dati Macro FRED
     fred = Fred(api_key=api_key)
-    yc = fred.get_series('T10Y2Y')
-    yc.index = pd.to_datetime(yc.index)
-    df['YieldCurve'] = yc
     
-    df['WALCL'] = fred.get_series('WALCL')
-    df['WTREGEN'] = fred.get_series('WTREGEN')
-    df['RRPONTSYD'] = fred.get_series('RRPONTSYD')
+    # 1. Yield Curve
+    df['YieldCurve'] = fred.get_series('T10Y2Y')
+    
+    # 2. Shiller PE (CAPE Ratio) - Valutazione Fondamentale
+    df['CAPE'] = fred.get_series('CAPE')
+    
+    # 3. Componenti Liquidità FED
+    df['WALCL'] = fred.get_series('WALCL') # Balance Sheet
+    df['WTREGEN'] = fred.get_series('WTREGEN') # TGA
+    df['RRPONTSYD'] = fred.get_series('RRPONTSYD') # Reverse Repo
     
     df = df.ffill().dropna()
     
+    # Calcolo Liquidità Netta (Trilioni)
     df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
     df['Liquidity_Delta_30d'] = df['Fed_Liquidity_T'].diff(periods=21)
     
-    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'High Yield', 'VIX', 'Fed_Liquidity_T']:
+    # Calcolo Z-Scores per rilevare eccessi
+    cols_to_z = ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'High Yield', 'VIX', 'Fed_Liquidity_T', 'CAPE']
+    for col in cols_to_z:
         df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
