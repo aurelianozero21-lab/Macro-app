@@ -4,6 +4,7 @@ from fredapi import Fred
 import feedparser
 import urllib.request
 import json
+import requests
 import streamlit as st
 import datetime
 
@@ -45,6 +46,39 @@ def get_shiller_pe():
         return df_cape['CAPE']
     except Exception as e:
         return pd.Series(dtype=float)
+
+# --- NUOVO MODULO: ANALISI ON-CHAIN ---
+@st.cache_data(ttl=43200) # Si aggiorna ogni 12 ore (dati lenti)
+def get_onchain_metrics():
+    try:
+        # API ufficiale gratuita della Blockchain per l'Hash Rate
+        url = "https://api.blockchain.info/charts/hash-rate?timespan=3years&format=json"
+        res = requests.get(url).json()
+        
+        df_hash = pd.DataFrame(res['values'])
+        df_hash['x'] = pd.to_datetime(df_hash['x'], unit='s')
+        df_hash.set_index('x', inplace=True)
+        df_hash.columns = ['HashRate']
+        
+        # Calcolo dell'Hash Ribbon (SMA 30 vs SMA 60)
+        df_hash['SMA30'] = df_hash['HashRate'].rolling(window=30).mean()
+        df_hash['SMA60'] = df_hash['HashRate'].rolling(window=60).mean()
+        
+        current = df_hash.iloc[-1]
+        
+        # Logica della Capitolazione
+        if current['SMA30'] < current['SMA60']:
+            hash_status = "🔴 MINER CAPITULATION (Rischio/Bottoming)"
+        else:
+            # Controllo se è un incrocio rialzista recente (Recovery)
+            if df_hash['SMA30'].iloc[-10] < df_hash['SMA60'].iloc[-10]:
+                hash_status = "🟢 BUY SIGNAL (Fine Capitolazione)"
+            else:
+                hash_status = "📈 TREND SANO (Miners in Espansione)"
+                
+        return hash_status, df_hash
+    except Exception as e:
+        return "N/A", pd.DataFrame()
 
 @st.cache_data(ttl=7200)
 def load_all_data(api_key, lookback):
@@ -132,8 +166,7 @@ def calcola_backtest(df, pesi):
     
     return equity, equity_sp500, cagr, max_dd
 
-# --- NUOVA FUNZIONE: SMART ALERTS ---
-def check_smart_alerts(df, live_prices, tension_index):
+def check_smart_alerts(df, live_prices, tension_index, hash_status=""):
     alerts = []
     
     if df.empty:
@@ -141,20 +174,16 @@ def check_smart_alerts(df, live_prices, tension_index):
         
     current = df.iloc[-1]
     
-    # 1. Alert Volatilità Estrema
     vix_live = live_prices.get('^VIX', current.get('VIX', 0))
     if vix_live > 28:
         alerts.append("🚨 PANICO SUI MERCATI: Il VIX ha superato quota 28. Possibile crash azionario in corso.")
         
-    # 2. Alert Rischio Geopolitico
     if tension_index >= 70:
         alerts.append("🔥 ALLARME GEOPOLITICA: Indice di tensione alle stelle (>70). Controlla il prezzo dell'Oro e del Petrolio.")
         
-    # 3. Alert Divergenza Smart Money
     if current.get('Z_S&P 500', 0) > 0 and current.get('Z_High Yield', 0) < -1:
         alerts.append("⚠️ DIVERGENZA FATALE: L'S&P 500 sta salendo ma il mercato del credito spazzatura sta crollando. Le banche stanno uscendo.")
         
-    # 4. Alert Crypto Flash Crash / Pump
     btc_live = live_prices.get('BTC-USD', current.get('Bitcoin', 0))
     try:
         btc_ieri = df['Bitcoin'].iloc[-2]
@@ -166,7 +195,6 @@ def check_smart_alerts(df, live_prices, tension_index):
     except:
         pass
         
-    # 5. Alert Inversione Curva dei Rendimenti
     try:
         yc_oggi = df['YieldCurve'].iloc[-1]
         yc_ieri = df['YieldCurve'].iloc[-2]
@@ -174,6 +202,12 @@ def check_smart_alerts(df, live_prices, tension_index):
             alerts.append("☠️ INVERSIONE DELLA CURVA: I tassi a 2 anni hanno appena superato i decennali. Il timer della recessione è partito.")
     except:
         pass
+        
+    # Nuovo Alert On-Chain
+    if "CAPITULATION" in hash_status:
+        alerts.append("⛓️ ALLERTA ON-CHAIN: I Minatori di Bitcoin sono in Capitolazione (spengono le macchine). Spesso segna il minimo assoluto del mercato.")
+    elif "BUY SIGNAL" in hash_status:
+        alerts.append("💎 SEGNALE ON-CHAIN: I Minatori stanno ripartendo. Questo è storicamente uno dei più forti segnali di acquisto per Bitcoin.")
         
     return alerts
 
