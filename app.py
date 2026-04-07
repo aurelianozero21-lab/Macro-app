@@ -4,7 +4,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import google.generativeai as genai
 from io import BytesIO
-from datetime import datetime
 
 # Importa tutta la logica dal file engine.py
 from engine import *
@@ -141,7 +140,8 @@ with tab1:
     
     if not df_sp500_corrente.empty and not df_sp500_storico.empty:
         fig_season = go.Figure()
-        fig_season.add_trace(go.Scatter(x=df_sp500_corrente['DayOfYear'], y=df_sp500_corrente['Cumulative'], name=f'S&P 500 ({datetime.now().year})', line=dict(color='#00b894', width=3)))
+        anno_ora = pd.Timestamp.now().year
+        fig_season.add_trace(go.Scatter(x=df_sp500_corrente['DayOfYear'], y=df_sp500_corrente['Cumulative'], name=f'S&P 500 ({anno_ora})', line=dict(color='#00b894', width=3)))
         fig_season.add_trace(go.Scatter(x=df_sp500_storico['DayOfYear'], y=df_sp500_storico['Cumulative Storico'], name='Media Storica (20 anni)', line=dict(color='#b2bec3', width=2, dash='dash')))
         fig_season.update_layout(height=400, xaxis_title="Giorno dell'Anno (1-365)", yaxis_title="Performance Cumulata (Base 100)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'))
         st.plotly_chart(fig_season, use_container_width=True)
@@ -207,7 +207,8 @@ with tab2:
     st.write("L'andamento di Bitcoin nel corso dell'anno attuale rispetto alla media storica decennale.")
     if not df_btc_corrente.empty and not df_btc_storico.empty:
         fig_btc_season = go.Figure()
-        fig_btc_season.add_trace(go.Scatter(x=df_btc_corrente['DayOfYear'], y=df_btc_corrente['Cumulative'], name=f'Bitcoin ({datetime.now().year})', line=dict(color='#fdcb6e', width=3)))
+        anno_ora_btc = pd.Timestamp.now().year
+        fig_btc_season.add_trace(go.Scatter(x=df_btc_corrente['DayOfYear'], y=df_btc_corrente['Cumulative'], name=f'Bitcoin ({anno_ora_btc})', line=dict(color='#fdcb6e', width=3)))
         fig_btc_season.add_trace(go.Scatter(x=df_btc_storico['DayOfYear'], y=df_btc_storico['Cumulative Storico'], name='Media Storica', line=dict(color='#b2bec3', width=2, dash='dash')))
         fig_btc_season.update_layout(height=400, xaxis_title="Giorno dell'Anno (1-365)", yaxis_title="Performance Cumulata (Base 100)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'))
         st.plotly_chart(fig_btc_season, use_container_width=True)
