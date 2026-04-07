@@ -18,7 +18,7 @@ with st.expander("📚 Cruscotto Rapido (Come leggere i dati)"):
     * **Liquidità FED:** Quantità di moneta nel sistema. Se sale, i mercati salgono. Se scende, c'è rischio crollo.
     * **Shiller P/E (CAPE):** Valutazione storica. Se > 30, le azioni sono estremamente costose (Rischio Bolla).
     * **Z-Score:** Misura gli eccessi. **> 2** = Ipercomprato (troppo caro). **< -2** = Ipervenduto (a sconto).
-    * **Curva Rendimenti:** Se Invertita (< 0), il mercato obbligazionario prezza una recessione a breve.
+    * **Hash Ribbon (On-Chain):** Monitora i minatori di Bitcoin. La "Capitolazione" segna spesso il fondo del mercato.
     * **Smart Money (HYG):** Se le azioni salgono ma l'HYG scende, le banche stanno scaricando rischio di nascosto.
     * **Mayer Multiple (Crypto):** < 1.0 = Zona di Accumulo Storica. > 2.4 = Bolla Speculativa Estrema.
     """)
@@ -26,10 +26,11 @@ with st.expander("📚 Cruscotto Rapido (Come leggere i dati)"):
 # --- INIZIALIZZAZIONE E SINCRONIZZAZIONE DATI ---
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
 
-with st.spinner("📊 Sincronizzazione Dati Live e Motori FED..."):
+with st.spinner("📊 Sincronizzazione Dati Live e Blockchain..."):
     try:
         df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
         live_prices = get_live_prices()
+        hash_status, df_hash = get_onchain_metrics()
         df_etfs = get_etf_screener()
         df_crypto = get_crypto_screener()
         fgi_val, fgi_class = get_crypto_fgi()
@@ -45,17 +46,19 @@ if current.empty:
     st.stop()
 
 # --- SMART ALERTS (SISTEMA DI ALLARME ISTITUZIONALE) ---
-alerts = check_smart_alerts(df, live_prices, tension_index)
+alerts = check_smart_alerts(df, live_prices, tension_index, hash_status)
 if alerts:
     st.markdown("---")
     for alert in alerts:
-        # Usa st.error per i rossi, st.warning se decideremo di metterne di più lievi
-        st.error(f"**{alert}**")
+        if "BUY SIGNAL" in alert or "🚀" in alert or "🟢" in alert:
+            st.success(f"**{alert}**")
+        else:
+            st.error(f"**{alert}**")
     st.markdown("---")
 
 # Calcolo fase macro per l'AI
 fase_attuale = calcola_fase_avanzata(current.get('YieldCurve', 0), current.get('Z_S&P 500', 0), tension_index)
-ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current.get('Z_S&P 500', 0):.2f}, Shiller CAPE: {current.get('CAPE', 0):.2f}, Liquidità FED Delta 30g: {current.get('Liquidity_Delta_30d', 0):.2f}T, Oro Z-Score: {current.get('Z_Oro', 0):.2f}, Indice Geopolitica: {tension_index}/100, BTC Mayer: {current.get('Mayer_BTC', 0):.2f}."
+ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current.get('Z_S&P 500', 0):.2f}, Shiller CAPE: {current.get('CAPE', 0):.2f}, Liquidità FED Delta 30g: {current.get('Liquidity_Delta_30d', 0):.2f}T, Oro Z-Score: {current.get('Z_Oro', 0):.2f}, BTC Mayer: {current.get('Mayer_BTC', 0):.2f}, On-Chain BTC: {hash_status}."
 
 # --- SIDEBAR: FUNZIONI PRO ---
 st.sidebar.markdown("---")
@@ -108,7 +111,7 @@ if st.sidebar.button("💾 Salva ID nel Database", use_container_width=True):
             else: st.sidebar.error("Errore DB Supabase.")
 
 # --- SCHEDE PRINCIPALI DELL'APPLICAZIONE ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro & Liquidity", "⚡ Crypto Rotation", "🌍 Geopolitica", "🔥 Risk Manager", "🤖 Quant Chat", "📚 Academy"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro & Liquidity", "⚡ Crypto & On-Chain", "🌍 Geopolitica", "🔥 Risk Manager", "🤖 Quant Chat", "📚 Academy"])
 
 # --- TAB 1: MACROECONOMIA E LIQUIDITA' ---
 with tab1:
@@ -130,7 +133,7 @@ with tab1:
     
     st.markdown("---")
     st.header("🌊 Fed Liquidity Tracker")
-    st.write("Analisi di correlazione tra stampa di moneta (FED) e S&P 500. La divergenza segnala manipolazione o inversione.")
+    st.write("Analisi di correlazione tra stampa di moneta (FED) e S&P 500.")
     
     if 'Fed_Liquidity_T' in df.columns and 'S&P 500' in df.columns:
         fig_liq = go.Figure()
@@ -180,13 +183,13 @@ with tab1:
         with col_g2: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Settore'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Settori S&P 500").update_layout(coloraxis_showscale=False, height=350), use_container_width=True)
         st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
 
-# --- TAB 2: CRYPTO ---
+# --- TAB 2: CRYPTO E ON-CHAIN ---
 with tab2:
-    st.header("⚡ Crypto Cycle & Bitcoin Valuation")
+    st.header("⚡ Valutazione Ciclo Bitcoin")
     mayer_btc = current.get('Mayer_BTC', 0)
     col_pre1, col_pre2 = st.columns(2)
     with col_pre1:
-        st.subheader("Fase Macro Bitcoin")
+        st.subheader("Fase Macro (Mayer Multiple)")
         if mayer_btc < 1.0: st.success("🔋 **ACCUMULO (Sconto Storico)**")
         elif mayer_btc < 2.0: st.warning("📈 **BULL MARKET (Trend Sano)**")
         else: st.error("💥 **BOLLA SPECULATIVA (Prendere Profitti)**")
@@ -199,6 +202,24 @@ with tab2:
     c2.metric("Mayer Multiple", f"{mayer_btc:.2f}")
     c3.metric("RSI (14 Giorni)", f"{current.get('RSI_BTC', 0):.0f}")
     c4.metric("Distanza da ATH", f"{current.get('BTC_Drawdown', 0):.1f}%")
+    
+    st.markdown("---")
+    st.header("⛓️ Analisi On-Chain: Hash Ribbon")
+    st.write("Misura la salute della rete Bitcoin e la redditività dei Minatori. Quando la media veloce scende sotto la lenta, i minatori stanno capitolando (ottimo setup di lungo termine).")
+    
+    if "CAPITULATION" in hash_status:
+        st.error(f"**Stato Rete Attuale:** {hash_status}")
+    elif "BUY SIGNAL" in hash_status:
+        st.success(f"**Stato Rete Attuale:** {hash_status}")
+    else:
+        st.info(f"**Stato Rete Attuale:** {hash_status}")
+        
+    if not df_hash.empty:
+        fig_hash = go.Figure()
+        fig_hash.add_trace(go.Scatter(x=df_hash.index, y=df_hash['SMA30'], name='SMA 30 (Veloce)', line=dict(color='#ff7675', width=2)))
+        fig_hash.add_trace(go.Scatter(x=df_hash.index, y=df_hash['SMA60'], name='SMA 60 (Lenta)', line=dict(color='#0984e3', width=2)))
+        fig_hash.update_layout(height=350, margin=dict(l=0, r=0, t=30, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'), yaxis_title="Terahashes/s")
+        st.plotly_chart(fig_hash, use_container_width=True)
     
     if not df_crypto.empty: 
         st.markdown("---")
@@ -314,3 +335,5 @@ with tab6:
         st.markdown("""Se l'S&P 500 sale ma le obbligazioni High Yield (HYG) scendono, il "Retail" sta comprando per fomo mentre le Banche scaricano asset tossici in silenzio.""")
     with st.expander("₿ 7. Il Mayer Multiple (Bottom & Top Crypto)"): 
         st.markdown("""Prezzo BTC diviso la Media Mobile a 200 giorni. < 1.0 = Zona di forte accumulo; > 2.4 = Segnale matematico di euforia e presa di profitto.""")
+    with st.expander("⛓️ 8. Hash Ribbon (Analisi On-Chain)"):
+        st.markdown("""Guarda direttamente la potenza di calcolo della blockchain di Bitcoin (Hash Rate). Quando il prezzo scende troppo, i minatori meno efficienti spengono le macchine e vanno in 'Capitolazione' (SMA 30 scende sotto SMA 60). Quando la rete si riprende (SMA 30 incrocia al rialzo SMA 60), si genera storicamente uno dei segnali di acquisto più potenti e affidabili del mercato crypto.""")
