@@ -6,20 +6,24 @@ import google.generativeai as genai
 from io import BytesIO
 from datetime import datetime
 
+# Importa tutta la logica dal file engine.py
 from engine import *
 
+# --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Macro Dashboard Pro", page_icon="📊", layout="wide")
 st.title("📊 Global Macro, Crypto & AI Terminal")
 
 with st.expander("📚 Cruscotto Rapido (Come leggere i dati)"):
     st.markdown("""
     * **Liquidità FED:** Quantità di moneta nel sistema. Se sale, i mercati salgono. Se scende, c'è rischio crollo.
+    * **Shiller P/E (CAPE):** Valutazione storica. Se > 30, le azioni sono estremamente costose (Rischio Bolla).
     * **Z-Score:** Misura gli eccessi. **> 2** = Ipercomprato (troppo caro). **< -2** = Ipervenduto (a sconto).
     * **Curva Rendimenti:** Se Invertita (< 0), il mercato obbligazionario prezza una recessione a breve.
     * **Smart Money (HYG):** Se le azioni salgono ma l'HYG scende, le banche stanno scaricando rischio di nascosto.
     * **Mayer Multiple (Crypto):** < 1.0 = Zona di Accumulo Storica. > 2.4 = Bolla Speculativa Estrema.
     """)
 
+# --- INIZIALIZZAZIONE E SINCRONIZZAZIONE DATI ---
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
 
 with st.spinner("📊 Sincronizzazione Dati Live e Motori FED..."):
@@ -36,10 +40,11 @@ with st.spinner("📊 Sincronizzazione Dati Live e Motori FED..."):
         st.error(f"Errore di connessione ai fornitori dati: {e}")
         st.stop()
 
+# Calcolo fase macro per l'AI
 fase_attuale = calcola_fase_avanzata(current['YieldCurve'], current['Z_S&P 500'], tension_index)
-ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current['Z_S&P 500']:.2f}, Liquidità FED Delta 30g: {current['Liquidity_Delta_30d']:.2f}T, Oro Z-Score: {current['Z_Oro']:.2f}, Indice Geopolitica: {tension_index}/100, BTC Mayer: {current['Mayer_BTC']:.2f}."
+ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current['Z_S&P 500']:.2f}, Shiller CAPE: {current.get('CAPE', 0):.2f}, Liquidità FED Delta 30g: {current['Liquidity_Delta_30d']:.2f}T, Oro Z-Score: {current['Z_Oro']:.2f}, Indice Geopolitica: {tension_index}/100, BTC Mayer: {current['Mayer_BTC']:.2f}."
 
-# --- SIDEBAR ---
+# --- SIDEBAR: FUNZIONI PRO ---
 st.sidebar.markdown("---")
 def to_excel(dataframe):
     output = BytesIO()
@@ -89,23 +94,26 @@ if st.sidebar.button("💾 Salva ID nel Database", use_container_width=True):
             if "duplicate key" in str(e).lower(): st.sidebar.info("✅ ID già presente nel sistema.")
             else: st.sidebar.error("Errore DB Supabase.")
 
-# --- SCHEDE PRINCIPALI ---
+# --- SCHEDE PRINCIPALI DELL'APPLICAZIONE ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro & Liquidity", "⚡ Crypto Rotation", "🌍 Geopolitica", "🔥 Risk Manager", "🤖 Quant Chat", "📚 Academy"])
 
+# --- TAB 1: MACROECONOMIA E LIQUIDITA' ---
 with tab1:
     st.header("🚦 Semaforo Macro Intelligente")
     if "1." in fase_attuale: st.error(f"🚨 **FASE DI MERCATO: {fase_attuale}**")
     elif "2." in fase_attuale: st.warning(f"⚖️ **FASE DI MERCATO: {fase_attuale}**")
     else: st.success(f"🚀 **FASE DI MERCATO: {fase_attuale}**")
     
-    col_live1, col_live2, col_live3 = st.columns(3)
+    col_live1, col_live2, col_live3, col_live4 = st.columns(4)
     sp500_live = live_prices.get('^GSPC', current['S&P 500'])
     vix_live = live_prices.get('^VIX', current['VIX'])
     liq_delta = current['Liquidity_Delta_30d']
+    cape_val = current.get('CAPE', 0)
     
     col_live1.metric("S&P 500 (Live)", f"{sp500_live:,.2f}", delta=f"Z-Score: {current['Z_S&P 500']:.2f}")
-    col_live2.metric("Liquidità FED Netta", f"${current['Fed_Liquidity_T']:.2f} Trilioni", delta=f"{'+' if liq_delta > 0 else ''}{liq_delta:.2f}T (Ultimi 30g)", delta_color="normal")
-    col_live3.metric("VIX Index (Paura)", f"{vix_live:.2f}", delta="Volatilità", delta_color="off")
+    col_live2.metric("Liquidità FED Netta", f"${current['Fed_Liquidity_T']:.2f}T", delta=f"{'+' if liq_delta > 0 else ''}{liq_delta:.2f}T (30g)", delta_color="normal")
+    col_live3.metric("Shiller P/E (CAPE)", f"{cape_val:.2f}", delta="> 30 Rischio Bolla", delta_color="inverse" if cape_val > 30 else "normal")
+    col_live4.metric("VIX Index (Paura)", f"{vix_live:.2f}", delta="Volatilità", delta_color="off")
     
     st.markdown("---")
     st.header("🌊 Fed Liquidity Tracker")
@@ -158,6 +166,7 @@ with tab1:
         with col_g2: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Settore'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Settori S&P 500").update_layout(coloraxis_showscale=False, height=350), use_container_width=True)
         st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
 
+# --- TAB 2: CRYPTO ---
 with tab2:
     st.header("⚡ Crypto Cycle & Bitcoin Valuation")
     mayer_btc = current['Mayer_BTC']
@@ -182,6 +191,7 @@ with tab2:
         st.subheader("Screener Altcoin (Rotazione 1M)")
         st.plotly_chart(px.bar(df_crypto, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn').update_layout(coloraxis_showscale=False, height=350), use_container_width=True)
 
+# --- TAB 3: GEOPOLITICA E MATERIE PRIME ---
 with tab3:
     st.header("🌍 Radar Geopolitico e Rischio Globale")
     col_g1, col_g2, col_g3 = st.columns([1.5, 1, 1.2])
@@ -202,6 +212,7 @@ with tab3:
         st.subheader("📰 Ultime Notizie Analizzate")
         for item in top_news: st.markdown(f"- **[{'🔴 Rischio' if item['score'] > 0 else '🟢 Distensione'}]** [{item['titolo']}]({item['link']})")
 
+# --- TAB 4: STRESS TEST E BACKTEST ---
 with tab4:
     st.header("🔥 Risk Manager & Backtest Matematico")
     st.write("Inserisci l'allocazione del tuo capitale. Il motore simulerà le performance storiche a partire da 10.000$.")
@@ -248,6 +259,7 @@ with tab4:
                 st.markdown(genai.GenerativeModel(mod).generate_content(f"Agisci come un Risk Manager. Portafoglio: Azioni {alloc_azioni}%, Bond {alloc_obbligazioni}%, Crypto {alloc_crypto}%, Difesa {alloc_difesa}%. Macro attuale: {ai_context}. Fornisci vulnerabilità e ottimizzazioni in Markdown.").text)
         else: st.error("Manca GEMINI_API_KEY nei Secrets.")
 
+# --- TAB 5: AI CHATBOT ---
 with tab5:
     st.header("🤖 Quant AI Assistant")
     st.write("Interroga l'intelligenza artificiale sui dati in tempo reale della dashboard.")
@@ -265,19 +277,22 @@ with tab5:
             st.chat_message("assistant").markdown(res)
             st.session_state.chat_history.append({"role": "assistant", "content": res})
 
+# --- TAB 6: ACADEMY ISTITUZIONALE ---
 with tab6:
     st.header("📚 Macro Academy: Masterclass per Investitori")
     st.write("I principi matematici e logici alla base della piattaforma.")
     
     with st.expander("🌊 1. La Liquidità Netta FED (Il motore dei mercati)"):
         st.markdown("""**La Liquidità comanda, i fondamentali seguono.** La "Net Liquidity" si calcola come: `Bilancio FED - Conto del Tesoro (TGA) - Reverse Repo`. Quando sale, gonfia Azioni e Bitcoin. Se scende, la liquidità viene drenata e i mercati faticano.""")
-    with st.expander("📉 2. CAGR e Maximum Drawdown (Il vero Rischio)"): 
-        st.markdown("""Il **CAGR** è la percentuale media di quanto cresce il portafoglio ogni anno. Il **Maximum Drawdown** è la perdita più profonda registrata dal picco al fondo (es. il crollo del 2008). Serve a farti capire se riusciresti emotivamente a sopportare quel crollo senza vendere in perdita.""")
-    with st.expander("📊 3. Lo Z-Score (La Misura dell'Eccesso)"): 
-        st.markdown("""Lo Z-Score ci dice di quante *deviazioni standard* il prezzo attuale si è allontanato dalla media a 90 giorni. > 2 = Rischio correzione, < -2 = Ipervenduto.""")
-    with st.expander("🏛️ 4. La Curva dei Rendimenti (L'Oracolo)"): 
+    with st.expander("🏛️ 2. Shiller P/E (CAPE Ratio) - Rilevatore di Bolle"):
+        st.markdown("""Creato dal Premio Nobel Robert Shiller, valuta se le azioni sono care dividendo il prezzo dell'S&P 500 per la media degli utili degli ultimi 10 anni (aggiustati per l'inflazione). Storicamente, un **CAPE > 30** indica un mercato in fortissima sopravvalutazione e ha preceduto i più grandi bear market (1929, 2000, 2021).""")
+    with st.expander("📉 3. CAGR e Maximum Drawdown (Il vero Rischio)"): 
+        st.markdown("""Il **CAGR** è la percentuale media di crescita annua del portafoglio. Il **Maximum Drawdown** è la perdita peggiore (dal picco al minimo). Serve a capire la tua tenuta emotiva durante i crash.""")
+    with st.expander("📊 4. Lo Z-Score (La Misura dell'Eccesso)"): 
+        st.markdown("""Lo Z-Score ci dice di quante *deviazioni standard* il prezzo si è allontanato dalla media a 90 giorni. > 2 = Rischio correzione immediata, < -2 = Ipervenduto.""")
+    with st.expander("🏛️ 5. La Curva dei Rendimenti (L'Oracolo)"): 
         st.markdown("""Se i titoli a 2 anni pagano più di quelli a 10 anni (Curva < 0), significa che il mercato ha estrema paura del presente. Anticipa storicamente le recessioni.""")
-    with st.expander("👁️ 5. Smart Money Divergence (HYG vs S&P)"): 
-        st.markdown("""Se l'S&P 500 sale ma le obbligazioni High Yield (HYG) scendono, il "Retail" compra in euforia mentre le Banche stanno segretamente vendendo asset di rischio.""")
-    with st.expander("₿ 6. Il Mayer Multiple (Bottom & Top Crypto)"): 
-        st.markdown("""Prezzo BTC diviso la Media Mobile a 200 giorni. < 1.0 = Accumulo; > 2.4 = Euforia/Bolla.""")
+    with st.expander("👁️ 6. Smart Money Divergence (HYG vs S&P)"): 
+        st.markdown("""Se l'S&P 500 sale ma le obbligazioni High Yield (HYG) scendono, il "Retail" sta comprando per fomo mentre le Banche scaricano asset tossici in silenzio.""")
+    with st.expander("₿ 7. Il Mayer Multiple (Bottom & Top Crypto)"): 
+        st.markdown("""Prezzo BTC diviso la Media Mobile a 200 giorni. < 1.0 = Zona di forte accumulo; > 2.4 = Segnale matematico di euforia e presa di profitto.""")
