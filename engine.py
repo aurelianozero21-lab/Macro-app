@@ -47,11 +47,9 @@ def get_shiller_pe():
     except Exception as e:
         return pd.Series(dtype=float)
 
-# --- NUOVO MODULO: ANALISI ON-CHAIN ---
-@st.cache_data(ttl=43200) # Si aggiorna ogni 12 ore (dati lenti)
+@st.cache_data(ttl=43200)
 def get_onchain_metrics():
     try:
-        # API ufficiale gratuita della Blockchain per l'Hash Rate
         url = "https://api.blockchain.info/charts/hash-rate?timespan=3years&format=json"
         res = requests.get(url).json()
         
@@ -60,17 +58,14 @@ def get_onchain_metrics():
         df_hash.set_index('x', inplace=True)
         df_hash.columns = ['HashRate']
         
-        # Calcolo dell'Hash Ribbon (SMA 30 vs SMA 60)
         df_hash['SMA30'] = df_hash['HashRate'].rolling(window=30).mean()
         df_hash['SMA60'] = df_hash['HashRate'].rolling(window=60).mean()
         
         current = df_hash.iloc[-1]
         
-        # Logica della Capitolazione
         if current['SMA30'] < current['SMA60']:
             hash_status = "🔴 MINER CAPITULATION (Rischio/Bottoming)"
         else:
-            # Controllo se è un incrocio rialzista recente (Recovery)
             if df_hash['SMA30'].iloc[-10] < df_hash['SMA60'].iloc[-10]:
                 hash_status = "🟢 BUY SIGNAL (Fine Capitolazione)"
             else:
@@ -92,7 +87,7 @@ def load_all_data(api_key, lookback):
     
     try:
         lista_tickers = list(tickers_map.values())
-        data = yf.download(lista_tickers, period="15y", progress=False)
+        data = yf.download(lista_tickers, period="20y", progress=False) # Aumentato a 20 anni per la stagionalità
         
         if 'Close' in data:
             for nome, ticker in tickers_map.items():
@@ -166,6 +161,37 @@ def calcola_backtest(df, pesi):
     
     return equity, equity_sp500, cagr, max_dd
 
+# --- NUOVA FUNZIONE: STAGIONALITA' ---
+def calcola_stagionalita(df, asset_name):
+    if asset_name not in df.columns:
+        return pd.DataFrame(), pd.DataFrame()
+        
+    # Copia i dati e calcola il rendimento percentuale giornaliero
+    df_season = df[[asset_name]].copy()
+    df_season['Rendimento'] = df_season[asset_name].pct_change()
+    
+    # Aggiunge colonne per Giorno dell'anno e Anno
+    df_season['DayOfYear'] = df_season.index.dayofyear
+    df_season['Year'] = df_season.index.year
+    
+    anno_corrente = datetime.datetime.now().year
+    
+    # Isola l'anno in corso (normalizzato a 100 il 1 Gennaio)
+    df_corrente = df_season[df_season['Year'] == anno_corrente].copy()
+    if not df_corrente.empty:
+        df_corrente['Cumulative'] = (1 + df_corrente['Rendimento'].fillna(0)).cumprod() * 100
+        
+    # Calcola la media storica escludendo l'anno corrente
+    df_storico = df_season[df_season['Year'] < anno_corrente]
+    # Raggruppa per giorno dell'anno e fa la media dei rendimenti
+    media_giornaliera = df_storico.groupby('DayOfYear')['Rendimento'].mean()
+    
+    # Ricostruisce un anno "medio" basato sulla stagionalità (base 100)
+    df_media = pd.DataFrame({'DayOfYear': media_giornaliera.index, 'RendimentoMedio': media_giornaliera.values})
+    df_media['Cumulative Storico'] = (1 + df_media['RendimentoMedio']).cumprod() * 100
+    
+    return df_corrente, df_media
+
 def check_smart_alerts(df, live_prices, tension_index, hash_status=""):
     alerts = []
     
@@ -203,7 +229,6 @@ def check_smart_alerts(df, live_prices, tension_index, hash_status=""):
     except:
         pass
         
-    # Nuovo Alert On-Chain
     if "CAPITULATION" in hash_status:
         alerts.append("⛓️ ALLERTA ON-CHAIN: I Minatori di Bitcoin sono in Capitolazione (spengono le macchine). Spesso segna il minimo assoluto del mercato.")
     elif "BUY SIGNAL" in hash_status:
