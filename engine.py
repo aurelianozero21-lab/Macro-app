@@ -17,7 +17,6 @@ def init_supabase():
         return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     return None
 
-# --- PREZZI IN TEMPO REALE (Cache di 60 secondi) ---
 @st.cache_data(ttl=60)
 def get_live_prices():
     tickers = ['^GSPC', 'BTC-USD', 'GC=F', '^VIX', 'CL=F']
@@ -53,12 +52,24 @@ def load_all_data(api_key, lookback):
     df['RSI_BTC'] = 100 - (100 / (1 + rs_btc))
     
     fred = Fred(api_key=api_key)
+    # Yield Curve
     yc = fred.get_series('T10Y2Y')
     yc.index = pd.to_datetime(yc.index)
     df['YieldCurve'] = yc
-    df = df.ffill().dropna()
     
-    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'High Yield', 'VIX']:
+    # --- NUOVO: FED LIQUIDITY ---
+    # WALCL = Bilancio FED (Milioni), WTREGEN = TGA (Milioni), RRPONTSYD = Reverse Repo (Miliardi)
+    df['WALCL'] = fred.get_series('WALCL')
+    df['WTREGEN'] = fred.get_series('WTREGEN')
+    df['RRPONTSYD'] = fred.get_series('RRPONTSYD')
+    
+    df = df.ffill().dropna() # Riallinea le date (la FRED pubblica i dati in giorni diversi)
+    
+    # Calcolo in Trilioni di Dollari
+    df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
+    df['Liquidity_Delta_30d'] = df['Fed_Liquidity_T'].diff(periods=21) # Delta rispetto a 1 mese di borsa fa
+    
+    for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'High Yield', 'VIX', 'Fed_Liquidity_T']:
         df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
