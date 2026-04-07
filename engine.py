@@ -17,23 +17,39 @@ def init_supabase():
         return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     return None
 
-@st.cache_data(ttl=120) # Cache aumentata a 2 min per evitare blocchi
+@st.cache_data(ttl=120)
 def get_live_prices():
     tickers = ['^GSPC', 'BTC-USD', 'GC=F', '^VIX', 'CL=F']
     prices = {'^GSPC': 0, 'BTC-USD': 0, 'GC=F': 0, '^VIX': 0, 'CL=F': 0}
     try:
-        # BATCH DOWNLOAD: 1 sola richiesta invece di 5
         data = yf.download(tickers, period="1d", interval="2m", progress=False)
         if not data.empty and 'Close' in data:
             for t in tickers:
                 prices[t] = data['Close'][t].dropna().iloc[-1].item()
     except:
-        pass # Se fallisce, restituisce 0 ma non fa crashare l'app
+        pass
     return prices
 
-@st.cache_data(ttl=7200) # Dati storici salvati per 2 ore
+@st.cache_data(ttl=86400)
+def get_shiller_pe():
+    # Scraping diretto del CAPE Ratio (Dato che FRED non lo fornisce nativamente)
+    try:
+        url = 'https://www.multpl.com/shiller-pe/table/by-month'
+        tables = pd.read_html(url)
+        df_cape = tables[0]
+        df_cape.columns = ['Date', 'CAPE']
+        df_cape['Date'] = pd.to_datetime(df_cape['Date'])
+        # Pulizia testo e conversione numerica
+        df_cape['CAPE'] = df_cape['CAPE'].astype(str).str.extract(r'([0-9.]+)').astype(float)
+        df_cape.set_index('Date', inplace=True)
+        # Allinea i dati mensili ai giorni di borsa
+        df_cape = df_cape.sort_index().resample('D').ffill()
+        return df_cape['CAPE']
+    except Exception as e:
+        return pd.Series(dtype=float)
+
+@st.cache_data(ttl=7200)
 def load_all_data(api_key, lookback):
-    # Mappa dei nomi per l'app e relativi ticker Yahoo
     tickers_map = {
         'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 
         'Treasury 10Y': '^TNX', 'High Yield': 'HYG', 'VIX': '^VIX', 
@@ -43,7 +59,6 @@ def load_all_data(api_key, lookback):
     df = pd.DataFrame()
     
     try:
-        # BATCH DOWNLOAD STORICO: 1 richiesta invece di 8
         lista_tickers = list(tickers_map.values())
         data = yf.download(lista_tickers, period="15y", progress=False)
         
@@ -53,10 +68,9 @@ def load_all_data(api_key, lookback):
                 serie.index = pd.to_datetime(serie.index).tz_localize(None).normalize()
                 df[nome] = serie
     except Exception as e:
-        st.error(f"Errore download Yahoo Finance: {e}")
-        return pd.DataFrame() # Ritorna dataframe vuoto per evitare crash
+        st.error(f"Errore Yahoo Finance: {e}")
+        return pd.DataFrame()
             
-    # Calcoli Bitcoin
     df['BTC_ATH'] = df['Bitcoin'].cummax()
     df['BTC_Drawdown'] = ((df['Bitcoin'] - df['BTC_ATH']) / df['BTC_ATH']) * 100
     df['BTC_200DMA'] = df['Bitcoin'].rolling(window=200).mean()
@@ -66,20 +80,34 @@ def load_all_data(api_key, lookback):
     rs_btc = (delta_btc.where(delta_btc > 0, 0)).rolling(window=14).mean() / (-delta_btc.where(delta_btc < 0, 0)).rolling(window=14).mean()
     df['RSI_BTC'] = 100 - (100 / (1 + rs_btc))
     
+    # --- ISOLAMENTO ERRORI FRED ---
+    # Blocco 1: Yield Curve
     try:
         fred = Fred(api_key=api_key)
         df['YieldCurve'] = fred.get_series('T10Y2Y')
-        df['CAPE'] = fred.get_series('CAPE')
+    except:
+        df['YieldCurve'] = 0.0
+
+    # Blocco 2: Liquidità (Se fallisce non blocca il resto)
+    try:
+        fred = Fred(api_key=api_key)
         df['WALCL'] = fred.get_series('WALCL')
         df['WTREGEN'] = fred.get_series('WTREGEN')
         df['RRPONTSYD'] = fred.get_series('RRPONTSYD')
-    except Exception as e:
-        st.error(f"Errore connessione FRED: {e}")
-    
-    df = df.ffill().dropna()
-    
-    df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
+        df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
+    except:
+        df['Fed_Liquidity_T'] = 0.0
+        
     df['Liquidity_Delta_30d'] = df['Fed_Liquidity_T'].diff(periods=21)
+    
+    # Blocco 3: CAPE Ratio
+    cape_series = get_shiller_pe()
+    if not cape_series.empty:
+        df['CAPE'] = cape_series
+    else:
+        df['CAPE'] = 30.0 # Valore di emergenza neutro
+        
+    df = df.ffill().dropna()
     
     cols_to_z = ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'High Yield', 'VIX', 'Fed_Liquidity_T', 'CAPE']
     for col in cols_to_z:
