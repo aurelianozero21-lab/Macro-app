@@ -4,10 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import google.generativeai as genai
 from io import BytesIO
-import requests
 from datetime import datetime
 
-# Importiamo i calcoli dal motore
+# Importiamo i calcoli e il database dal motore
 from engine import *
 
 st.set_page_config(page_title="Macro Dashboard Pro", layout="wide")
@@ -120,7 +119,7 @@ with tab1:
     with col_sm2:
         st.subheader("📉 Indice della Paura (VIX)")
         if vix_live < 15: st.warning("😴 **Compiacenza Estrema**\nMercato tranquillo, rischio shock.")
-        elif vix_live > 25: st.error("😱 **Panico e Volatilità**\nMercato sotto stress. Accumula sui minimi.")
+        elif vix_live > 25: st.error("😱 **Panico e Volatilità**\nMercato sotto stress. Opportunità sui minimi.")
         else: st.success("✅ **Normale**\nNessuno stress sistemico.")
 
     st.markdown("---")
@@ -128,23 +127,24 @@ with tab1:
     col_st, col_mt, col_lt = st.columns(3)
     with col_st: 
         st.subheader("⏱️ Breve (1-3 Mesi)")
-        if tension_index >= 60: st.error("🛡️ **Focus:** Geopolitica e Oro")
-        elif "1." in fase_attuale: st.warning("🧱 **Focus:** Protezione (Utilities)")
-        else: st.success("🔥 **Focus:** Momentum e Tech")
+        if tension_index >= 60: st.error("🛡️ **Focus:** Geopolitica e Difesa (Oro, Utilities)")
+        elif "1." in fase_attuale: st.warning("🧱 **Focus:** Protezione Capitale (Cash, Bond a breve)")
+        else: st.success("🔥 **Focus:** Momentum Azionario (Tech, Finanza)")
     with col_mt: 
         st.subheader("📅 Medio (6-12 Mesi)")
-        if "1." in fase_attuale or "2." in fase_attuale: st.warning("📉 **Focus:** Taglio Tassi (Bonds)")
-        else: st.success("🏭 **Focus:** Espansione Azionaria")
+        if "1." in fase_attuale or "2." in fase_attuale: st.warning("📉 **Focus:** Anticipare Taglio Tassi (Obbligazioni a lungo termine)")
+        else: st.success("🏭 **Focus:** Rotazione Ciclica ed Espansione Azionaria")
     with col_lt: 
         st.subheader("🔭 Lungo (1-3 Anni)")
-        st.info("🌐 **Mega-Trend:** AI, Transizione Energetica")
+        st.info("🌐 **Mega-Trend:** Intelligenza Artificiale, Transizione Energetica (Rame/Uranio), Cybersecurity.")
 
     if not df_etfs.empty:
         st.markdown("---")
-        st.subheader("🗺️ Mappa Settoriale")
+        st.header("🗺️ Mappa Settoriale e Segnali ETF")
         col_g1, col_g2 = st.columns(2)
-        with col_g1: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Geografia'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn').update_layout(height=300), use_container_width=True)
-        with col_g2: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Settore'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn').update_layout(height=300), use_container_width=True)
+        with col_g1: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Geografia'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Geografie (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
+        with col_g2: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Settore'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Settori USA (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
+        st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
 
 # --- 2. CRYPTO ---
 with tab2:
@@ -164,7 +164,7 @@ with tab2:
     c2.metric("Mayer Multiple", f"{mayer_btc:.2f}")
     c3.metric("RSI (14 gg)", f"{current['RSI_BTC']:.0f}")
     c4.metric("Distanza ATH", f"{current['BTC_Drawdown']:.1f}%")
-    if not df_crypto.empty: st.plotly_chart(px.bar(df_crypto, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn').update_layout(height=300), use_container_width=True)
+    if not df_crypto.empty: st.plotly_chart(px.bar(df_crypto, x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Altcoin Rotation (1M)").update_layout(coloraxis_showscale=False, height=300), use_container_width=True)
 
 # --- 3. GEOPOLITICA ---
 with tab3:
@@ -177,12 +177,13 @@ with tab3:
     with col_g3:
         st.subheader("🛢️ Beni Rifugio / Energia")
         gold_live = live_prices.get('GC=F', current['Oro'])
-        oil_live = live_prices.get('CL=F', 0.0) # Prezzo Live WTI
+        oil_live = live_prices.get('CL=F', 0.0)
         st.metric("Oro (Live)", f"${gold_live:,.1f}", delta=f"Z-Score: {current['Z_Oro']:.2f}", delta_color="inverse" if current['Z_Oro'] > 1 else "normal")
         st.metric("Petrolio WTI (Live)", f"${oil_live:,.2f}", delta="Barile", delta_color="off")
 
     if top_news:
         st.markdown("---")
+        st.subheader("📰 Ultime Notizie Rilevate")
         for item in top_news: st.markdown(f"- **[{'🔴 Tension' if item['score'] > 0 else '🟢 Peace'}]** [{item['titolo']}]({item['link']})")
 
 # --- 4. STRESS TEST ---
@@ -205,7 +206,7 @@ with tab4:
 
 # --- 5. CHATBOT ---
 with tab5:
-    st.header("🤖 AI Assistant")
+    st.header("🤖 Quant AI Assistant")
     if "GEMINI_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         mod = next((m.name for m in genai.list_models() if "flash" in m.name.lower()), "gemini-1.5-flash")
@@ -222,6 +223,43 @@ with tab5:
 
 # --- 6. ACADEMY ---
 with tab6:
-    st.header("📚 Academy")
-    with st.expander("🌍 Macro & Banche Centrali"): st.write("Tassi alti deprimono le azioni e favoriscono l'obbligazionario.")
-    with st.expander("📈 Rotazione"): st.write("Capitali si spostano tra settori in base alle aspettative di crescita o recessione.")
+    st.header("📚 Macro Academy: Masterclass per Investitori")
+    st.write("Comprendi i concetti quantitativi alla base di questa dashboard per prendere decisioni consapevoli.")
+    
+    with st.expander("📊 1. Lo Z-Score (La Misura dell'Eccesso)"): 
+        st.markdown("""
+        Lo **Z-Score** è un indicatore statistico. Ci dice di quante "deviazioni standard" il prezzo attuale si è allontanato dalla sua media storica (nel nostro caso, a 90 giorni).
+        * **Z-Score vicino a 0:** L'asset è al suo prezzo "giusto" o in linea con il trend.
+        * **Z-Score > 2:** L'asset è salito troppo e troppo in fretta (Ipercomprato). Alto rischio di crollo.
+        * **Z-Score < -2:** L'asset è stato venduto eccessivamente per panico (Ipervenduto). Possibile occasione d'acquisto.
+        """)
+        
+    with st.expander("🏛️ 2. La Curva dei Rendimenti (L'Oracolo delle Recessioni)"): 
+        st.markdown("""
+        Misura la differenza di rendimento tra i Titoli di Stato USA a 10 anni e quelli a 2 anni (T10Y2Y).
+        * **Curva Normale (> 0):** I titoli a lungo termine pagano di più. Economia sana e in espansione.
+        * **Curva Invertita (< 0):** Il mercato ha così tanta paura del presente che i titoli a 2 anni pagano più di quelli a 10 anni. Storicamente, ha anticipato il 100% delle recessioni moderne.
+        """)
+        
+    with st.expander("👁️ 3. Smart Money Divergence (HYG vs S&P 500)"): 
+        st.markdown("""
+        I piccoli investitori guardano solo i prezzi delle azioni. I grandi fondi istituzionali ("Smart Money") guardano il **Mercato del Credito** e le obbligazioni spazzatura (High Yield - Ticker: HYG).
+        * **Divergenza Ribassista (Pericolo):** L'S&P 500 sale, ma l'HYG scende. Significa che il "Retail" sta comprando azioni in preda all'euforia, mentre le Banche stanno segretamente vendendo asset rischiosi. Un crollo è imminente.
+        * **Divergenza Rialzista (Opportunità):** Le azioni scendono per il panico, ma l'HYG sale. I grandi fondi stanno già ricomprando in saldo.
+        """)
+        
+    with st.expander("₿ 4. Il Mayer Multiple (Il Ciclo Bitcoin)"): 
+        st.markdown("""
+        Creato da Trace Mayer, si calcola dividendo il prezzo del Bitcoin per la sua Media Mobile a 200 giorni. È il miglior indicatore per capire in che fase del ciclo crypto ci troviamo.
+        * **< 1.0 (Accumulo):** Bitcoin costa meno della sua media storica. È la fase in cui comprare genera i massimi rendimenti a lungo termine.
+        * **1.0 - 2.0 (Bull Market):** Trend sano e rialzista. Mantenere le posizioni.
+        * **> 2.4 (Bolla):** Euforia totale. Il prezzo è insostenibile ed è matematicamente il momento di prendere profitti prima del "Bear Market".
+        """)
+
+    with st.expander("📈 5. Rotazione Settoriale (Dove va il denaro)"): 
+        st.markdown("""
+        Il mercato azionario non si muove tutto insieme. I capitali "ruotano" da un settore all'altro in base a cosa fa la Banca Centrale:
+        * **Economia si riprende (Tassi bassi):** Denaro va su Tech (XLK), Finanza (XLF) e Industriali (XLI).
+        * **Inflazione alta (Materie prime salgono):** Denaro va su Energia (XLE) e Oro.
+        * **Recessione in arrivo (Panico):** Denaro fugge verso porti sicuri come Sanità (XLV), Utilities (XLU) e Cash.
+        """)
