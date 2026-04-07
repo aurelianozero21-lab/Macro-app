@@ -80,7 +80,7 @@ st.sidebar.markdown(f"""
         🚀 Apri Telegram e Attiva
     </button>
 </a>
-""", unsafe_allow_all_schema=True, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 st.sidebar.write("Oppure inserisci manualmente:")
 tg_user_id = st.sidebar.text_input("ID Telegram:", value=url_id)
@@ -94,7 +94,7 @@ if st.sidebar.button("💾 Salva Iscrizione"):
         except Exception as e:
             if "duplicate key" in str(e).lower(): st.sidebar.success("✅ Sei già iscritto!")
             else: st.sidebar.error(f"Errore DB: {e}")
-
+            
 # --- SCHEDE PRINCIPALI ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Macro", "⚡ Crypto", "🌍 Geopolitica", "🔥 Stress Test", "🤖 AI Chatbot", "📚 Academy"])
 
