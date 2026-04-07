@@ -44,6 +44,15 @@ if current.empty:
     st.error("Dati storici non disponibili. Riprova tra qualche minuto.")
     st.stop()
 
+# --- SMART ALERTS (SISTEMA DI ALLARME ISTITUZIONALE) ---
+alerts = check_smart_alerts(df, live_prices, tension_index)
+if alerts:
+    st.markdown("---")
+    for alert in alerts:
+        # Usa st.error per i rossi, st.warning se decideremo di metterne di più lievi
+        st.error(f"**{alert}**")
+    st.markdown("---")
+
 # Calcolo fase macro per l'AI
 fase_attuale = calcola_fase_avanzata(current.get('YieldCurve', 0), current.get('Z_S&P 500', 0), tension_index)
 ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current.get('Z_S&P 500', 0):.2f}, Shiller CAPE: {current.get('CAPE', 0):.2f}, Liquidità FED Delta 30g: {current.get('Liquidity_Delta_30d', 0):.2f}T, Oro Z-Score: {current.get('Z_Oro', 0):.2f}, Indice Geopolitica: {tension_index}/100, BTC Mayer: {current.get('Mayer_BTC', 0):.2f}."
