@@ -31,7 +31,8 @@ def get_live_prices():
 
 @st.cache_data(ttl=3600)
 def load_all_data(api_key, lookback):
-    assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX', 'High Yield': 'HYG', 'VIX': '^VIX'}
+    # Aggiunto 'Bond ETF' (IEF) per backtest reale obbligazionario
+    assets = {'S&P 500': '^GSPC', 'Dollaro DXY': 'DX-Y.NYB', 'Oro': 'GC=F', 'Treasury 10Y': '^TNX', 'High Yield': 'HYG', 'VIX': '^VIX', 'Bond ETF': 'IEF'}
     df = pd.DataFrame()
     for name, ticker in assets.items():
         hist = yf.Ticker(ticker).history(period="15y")
@@ -52,27 +53,45 @@ def load_all_data(api_key, lookback):
     df['RSI_BTC'] = 100 - (100 / (1 + rs_btc))
     
     fred = Fred(api_key=api_key)
-    # Yield Curve
     yc = fred.get_series('T10Y2Y')
     yc.index = pd.to_datetime(yc.index)
     df['YieldCurve'] = yc
     
-    # --- NUOVO: FED LIQUIDITY ---
-    # WALCL = Bilancio FED (Milioni), WTREGEN = TGA (Milioni), RRPONTSYD = Reverse Repo (Miliardi)
     df['WALCL'] = fred.get_series('WALCL')
     df['WTREGEN'] = fred.get_series('WTREGEN')
     df['RRPONTSYD'] = fred.get_series('RRPONTSYD')
     
-    df = df.ffill().dropna() # Riallinea le date (la FRED pubblica i dati in giorni diversi)
+    df = df.ffill().dropna()
     
-    # Calcolo in Trilioni di Dollari
     df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
-    df['Liquidity_Delta_30d'] = df['Fed_Liquidity_T'].diff(periods=21) # Delta rispetto a 1 mese di borsa fa
+    df['Liquidity_Delta_30d'] = df['Fed_Liquidity_T'].diff(periods=21)
     
     for col in ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'High Yield', 'VIX', 'Fed_Liquidity_T']:
         df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
+
+def calcola_backtest(df, pesi):
+    colonne = ['S&P 500', 'Bond ETF', 'Bitcoin', 'Oro']
+    df_bt = df[colonne].copy()
+    rendimenti = df_bt.pct_change().dropna()
+    
+    rendimenti['Portafoglio'] = (
+        rendimenti['S&P 500'] * pesi['Azioni'] +
+        rendimenti['Bond ETF'] * pesi['Bonds'] +
+        rendimenti['Bitcoin'] * pesi['Crypto'] +
+        rendimenti['Oro'] * pesi['Difesa']
+    )
+    
+    capitale_iniziale = 10000
+    equity = (1 + rendimenti['Portafoglio']).cumprod() * capitale_iniziale
+    equity_sp500 = (1 + rendimenti['S&P 500']).cumprod() * capitale_iniziale
+    
+    anni = len(rendimenti) / 252
+    cagr = (equity.iloc[-1] / capitale_iniziale) ** (1 / anni) - 1 if anni > 0 else 0
+    max_dd = ((equity - equity.cummax()) / equity.cummax()).min()
+    
+    return equity, equity_sp500, cagr, max_dd
 
 @st.cache_data(ttl=3600)
 def get_etf_screener():
