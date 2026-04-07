@@ -5,6 +5,7 @@ import feedparser
 import urllib.request
 import json
 import streamlit as st
+import datetime
 
 try:
     from supabase import create_client
@@ -32,17 +33,14 @@ def get_live_prices():
 
 @st.cache_data(ttl=86400)
 def get_shiller_pe():
-    # Scraping diretto del CAPE Ratio (Dato che FRED non lo fornisce nativamente)
     try:
         url = 'https://www.multpl.com/shiller-pe/table/by-month'
         tables = pd.read_html(url)
         df_cape = tables[0]
         df_cape.columns = ['Date', 'CAPE']
         df_cape['Date'] = pd.to_datetime(df_cape['Date'])
-        # Pulizia testo e conversione numerica
         df_cape['CAPE'] = df_cape['CAPE'].astype(str).str.extract(r'([0-9.]+)').astype(float)
         df_cape.set_index('Date', inplace=True)
-        # Allinea i dati mensili ai giorni di borsa
         df_cape = df_cape.sort_index().resample('D').ffill()
         return df_cape['CAPE']
     except Exception as e:
@@ -80,15 +78,12 @@ def load_all_data(api_key, lookback):
     rs_btc = (delta_btc.where(delta_btc > 0, 0)).rolling(window=14).mean() / (-delta_btc.where(delta_btc < 0, 0)).rolling(window=14).mean()
     df['RSI_BTC'] = 100 - (100 / (1 + rs_btc))
     
-    # --- ISOLAMENTO ERRORI FRED ---
-    # Blocco 1: Yield Curve
     try:
         fred = Fred(api_key=api_key)
         df['YieldCurve'] = fred.get_series('T10Y2Y')
     except:
         df['YieldCurve'] = 0.0
 
-    # Blocco 2: Liquidità (Se fallisce non blocca il resto)
     try:
         fred = Fred(api_key=api_key)
         df['WALCL'] = fred.get_series('WALCL')
@@ -100,12 +95,11 @@ def load_all_data(api_key, lookback):
         
     df['Liquidity_Delta_30d'] = df['Fed_Liquidity_T'].diff(periods=21)
     
-    # Blocco 3: CAPE Ratio
     cape_series = get_shiller_pe()
     if not cape_series.empty:
         df['CAPE'] = cape_series
     else:
-        df['CAPE'] = 30.0 # Valore di emergenza neutro
+        df['CAPE'] = 30.0
         
     df = df.ffill().dropna()
     
@@ -137,6 +131,51 @@ def calcola_backtest(df, pesi):
     max_dd = ((equity - equity.cummax()) / equity.cummax()).min()
     
     return equity, equity_sp500, cagr, max_dd
+
+# --- NUOVA FUNZIONE: SMART ALERTS ---
+def check_smart_alerts(df, live_prices, tension_index):
+    alerts = []
+    
+    if df.empty:
+        return alerts
+        
+    current = df.iloc[-1]
+    
+    # 1. Alert Volatilità Estrema
+    vix_live = live_prices.get('^VIX', current.get('VIX', 0))
+    if vix_live > 28:
+        alerts.append("🚨 PANICO SUI MERCATI: Il VIX ha superato quota 28. Possibile crash azionario in corso.")
+        
+    # 2. Alert Rischio Geopolitico
+    if tension_index >= 70:
+        alerts.append("🔥 ALLARME GEOPOLITICA: Indice di tensione alle stelle (>70). Controlla il prezzo dell'Oro e del Petrolio.")
+        
+    # 3. Alert Divergenza Smart Money
+    if current.get('Z_S&P 500', 0) > 0 and current.get('Z_High Yield', 0) < -1:
+        alerts.append("⚠️ DIVERGENZA FATALE: L'S&P 500 sta salendo ma il mercato del credito spazzatura sta crollando. Le banche stanno uscendo.")
+        
+    # 4. Alert Crypto Flash Crash / Pump
+    btc_live = live_prices.get('BTC-USD', current.get('Bitcoin', 0))
+    try:
+        btc_ieri = df['Bitcoin'].iloc[-2]
+        variazione_btc = ((btc_live - btc_ieri) / btc_ieri) * 100
+        if variazione_btc < -7:
+            alerts.append(f"🩸 CRYPTO CRASH: Bitcoin sta perdendo oltre il 7% oggi ({variazione_btc:.1f}%).")
+        elif variazione_btc > 7:
+            alerts.append(f"🚀 CRYPTO PUMP: Bitcoin in volo di oltre il 7% oggi ({variazione_btc:.1f}%).")
+    except:
+        pass
+        
+    # 5. Alert Inversione Curva dei Rendimenti
+    try:
+        yc_oggi = df['YieldCurve'].iloc[-1]
+        yc_ieri = df['YieldCurve'].iloc[-2]
+        if yc_ieri > 0 and yc_oggi < 0:
+            alerts.append("☠️ INVERSIONE DELLA CURVA: I tassi a 2 anni hanno appena superato i decennali. Il timer della recessione è partito.")
+    except:
+        pass
+        
+    return alerts
 
 @st.cache_data(ttl=7200)
 def get_etf_screener():
