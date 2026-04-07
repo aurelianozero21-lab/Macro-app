@@ -17,7 +17,7 @@ with st.expander("📚 Cruscotto Rapido (Come leggere i dati)"):
     st.markdown("""
     * **Liquidità FED:** Quantità di moneta nel sistema. Se sale, i mercati salgono. Se scende, c'è rischio crollo.
     * **Shiller P/E (CAPE):** Valutazione storica. Se > 30, le azioni sono estremamente costose (Rischio Bolla).
-    * **Z-Score:** Misura gli eccessi. **> 2** = Ipercomprato (troppo caro). **< -2** = Ipervenduto (a sconto).
+    * **Stagionalità:** Compara l'anno in corso con la media storica. Aiuta a prevedere i periodi "caldi" o "freddi" dell'anno.
     * **Hash Ribbon (On-Chain):** Monitora i minatori di Bitcoin. La "Capitolazione" segna spesso il fondo del mercato.
     * **Smart Money (HYG):** Se le azioni salgono ma l'HYG scende, le banche stanno scaricando rischio di nascosto.
     * **Mayer Multiple (Crypto):** < 1.0 = Zona di Accumulo Storica. > 2.4 = Bolla Speculativa Estrema.
@@ -26,7 +26,7 @@ with st.expander("📚 Cruscotto Rapido (Come leggere i dati)"):
 # --- INIZIALIZZAZIONE E SINCRONIZZAZIONE DATI ---
 lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
 
-with st.spinner("📊 Sincronizzazione Dati Live e Blockchain..."):
+with st.spinner("📊 Sincronizzazione Dati Live e Motori FED..."):
     try:
         df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
         live_prices = get_live_prices()
@@ -44,6 +44,10 @@ with st.spinner("📊 Sincronizzazione Dati Live e Blockchain..."):
 if current.empty:
     st.error("Dati storici non disponibili. Riprova tra qualche minuto.")
     st.stop()
+
+# --- CALCOLO STAGIONALITA' ---
+df_sp500_corrente, df_sp500_storico = calcola_stagionalita(df, 'S&P 500')
+df_btc_corrente, df_btc_storico = calcola_stagionalita(df, 'Bitcoin')
 
 # --- SMART ALERTS (SISTEMA DI ALLARME ISTITUZIONALE) ---
 alerts = check_smart_alerts(df, live_prices, tension_index, hash_status)
@@ -132,6 +136,17 @@ with tab1:
     col_live4.metric("VIX Index (Paura)", f"{vix_live:.2f}", delta="Volatilità", delta_color="off")
     
     st.markdown("---")
+    st.header("📅 Cicli e Stagionalità (S&P 500)")
+    st.write("Confronto tra l'anno in corso e la media storica degli ultimi 20 anni. Permette di capire se il mercato è in anticipo o in ritardo rispetto ai suoi normali flussi di capitale stagionali.")
+    
+    if not df_sp500_corrente.empty and not df_sp500_storico.empty:
+        fig_season = go.Figure()
+        fig_season.add_trace(go.Scatter(x=df_sp500_corrente['DayOfYear'], y=df_sp500_corrente['Cumulative'], name=f'S&P 500 ({datetime.now().year})', line=dict(color='#00b894', width=3)))
+        fig_season.add_trace(go.Scatter(x=df_sp500_storico['DayOfYear'], y=df_sp500_storico['Cumulative Storico'], name='Media Storica (20 anni)', line=dict(color='#b2bec3', width=2, dash='dash')))
+        fig_season.update_layout(height=400, xaxis_title="Giorno dell'Anno (1-365)", yaxis_title="Performance Cumulata (Base 100)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'))
+        st.plotly_chart(fig_season, use_container_width=True)
+
+    st.markdown("---")
     st.header("🌊 Fed Liquidity Tracker")
     st.write("Analisi di correlazione tra stampa di moneta (FED) e S&P 500.")
     
@@ -158,22 +173,6 @@ with tab1:
         st.subheader("🖨️ Direzione Liquidità")
         if liq_delta > 0: st.success("🟢 **ESPANSIONE (Risk-On):** Il sistema è supportato dalla liquidità.")
         else: st.error("🔴 **CONTRAZIONE (Risk-Off):** La FED drena dollari. Rischio di correzione.")
-
-    st.markdown("---")
-    st.header("🎯 Matrice di Portafoglio Temporale")
-    col_st, col_mt, col_lt = st.columns(3)
-    with col_st: 
-        st.subheader("⏱️ Breve (1-3 Mesi)")
-        if tension_index >= 60: st.error("🛡️ Asset Difesa, Oro, Cash")
-        elif liq_delta < 0: st.warning("🧱 Protezione da Contrazione")
-        else: st.success("🔥 Momentum Azionario & Crypto")
-    with col_mt: 
-        st.subheader("📅 Medio (6-12 Mesi)")
-        if "1." in fase_attuale: st.warning("📉 Focus su Bond governativi (Taglio Tassi)")
-        else: st.success("🏭 Rotazione Ciclica Industriale")
-    with col_lt: 
-        st.subheader("🔭 Lungo (1-3 Anni)")
-        st.info("🌐 Megatrend AI, Energia, Uranio, Rame")
 
     if not df_etfs.empty:
         st.markdown("---")
@@ -203,6 +202,16 @@ with tab2:
     c3.metric("RSI (14 Giorni)", f"{current.get('RSI_BTC', 0):.0f}")
     c4.metric("Distanza da ATH", f"{current.get('BTC_Drawdown', 0):.1f}%")
     
+    st.markdown("---")
+    st.header("📅 Stagionalità (Bitcoin)")
+    st.write("L'andamento di Bitcoin nel corso dell'anno attuale rispetto alla media storica decennale.")
+    if not df_btc_corrente.empty and not df_btc_storico.empty:
+        fig_btc_season = go.Figure()
+        fig_btc_season.add_trace(go.Scatter(x=df_btc_corrente['DayOfYear'], y=df_btc_corrente['Cumulative'], name=f'Bitcoin ({datetime.now().year})', line=dict(color='#fdcb6e', width=3)))
+        fig_btc_season.add_trace(go.Scatter(x=df_btc_storico['DayOfYear'], y=df_btc_storico['Cumulative Storico'], name='Media Storica', line=dict(color='#b2bec3', width=2, dash='dash')))
+        fig_btc_season.update_layout(height=400, xaxis_title="Giorno dell'Anno (1-365)", yaxis_title="Performance Cumulata (Base 100)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'))
+        st.plotly_chart(fig_btc_season, use_container_width=True)
+
     st.markdown("---")
     st.header("⛓️ Analisi On-Chain: Hash Ribbon")
     st.write("Misura la salute della rete Bitcoin e la redditività dei Minatori. Quando la media veloce scende sotto la lenta, i minatori stanno capitolando (ottimo setup di lungo termine).")
@@ -325,15 +334,17 @@ with tab6:
         st.markdown("""**La Liquidità comanda, i fondamentali seguono.** La "Net Liquidity" si calcola come: `Bilancio FED - Conto del Tesoro (TGA) - Reverse Repo`. Quando sale, gonfia Azioni e Bitcoin. Se scende, la liquidità viene drenata e i mercati faticano.""")
     with st.expander("🏛️ 2. Shiller P/E (CAPE Ratio) - Rilevatore di Bolle"):
         st.markdown("""Creato dal Premio Nobel Robert Shiller, valuta se le azioni sono care dividendo il prezzo dell'S&P 500 per la media degli utili degli ultimi 10 anni (aggiustati per l'inflazione). Storicamente, un **CAPE > 30** indica un mercato in fortissima sopravvalutazione e ha preceduto i più grandi bear market (1929, 2000, 2021).""")
-    with st.expander("📉 3. CAGR e Maximum Drawdown (Il vero Rischio)"): 
+    with st.expander("📅 3. Stagionalità (Seasonality)"):
+        st.markdown("""I mercati azionari e crypto non sono del tutto casuali, ma presentano pattern temporali ricorrenti (es. 'Sell in May and go away' o il Rally di Natale). Il grafico stagionale sovrappone il rendimento cumulato dell'anno in corso alla media matematica degli ultimi 20 anni. Se la linea verde si discosta troppo da quella tratteggiata, ci troviamo in un'anomalia statistica che tenderà, prima o poi, a ricongiungersi alla media ("mean reversion").""")
+    with st.expander("📉 4. CAGR e Maximum Drawdown (Il vero Rischio)"): 
         st.markdown("""Il **CAGR** è la percentuale media di crescita annua del portafoglio. Il **Maximum Drawdown** è la perdita peggiore (dal picco al minimo). Serve a capire la tua tenuta emotiva durante i crash.""")
-    with st.expander("📊 4. Lo Z-Score (La Misura dell'Eccesso)"): 
+    with st.expander("📊 5. Lo Z-Score (La Misura dell'Eccesso)"): 
         st.markdown("""Lo Z-Score ci dice di quante *deviazioni standard* il prezzo si è allontanato dalla media a 90 giorni. > 2 = Rischio correzione immediata, < -2 = Ipervenduto.""")
-    with st.expander("🏛️ 5. La Curva dei Rendimenti (L'Oracolo)"): 
+    with st.expander("🏛️ 6. La Curva dei Rendimenti (L'Oracolo)"): 
         st.markdown("""Se i titoli a 2 anni pagano più di quelli a 10 anni (Curva < 0), significa che il mercato ha estrema paura del presente. Anticipa storicamente le recessioni.""")
-    with st.expander("👁️ 6. Smart Money Divergence (HYG vs S&P)"): 
+    with st.expander("👁️ 7. Smart Money Divergence (HYG vs S&P)"): 
         st.markdown("""Se l'S&P 500 sale ma le obbligazioni High Yield (HYG) scendono, il "Retail" sta comprando per fomo mentre le Banche scaricano asset tossici in silenzio.""")
-    with st.expander("₿ 7. Il Mayer Multiple (Bottom & Top Crypto)"): 
+    with st.expander("₿ 8. Il Mayer Multiple (Bottom & Top Crypto)"): 
         st.markdown("""Prezzo BTC diviso la Media Mobile a 200 giorni. < 1.0 = Zona di forte accumulo; > 2.4 = Segnale matematico di euforia e presa di profitto.""")
-    with st.expander("⛓️ 8. Hash Ribbon (Analisi On-Chain)"):
+    with st.expander("⛓️ 9. Hash Ribbon (Analisi On-Chain)"):
         st.markdown("""Guarda direttamente la potenza di calcolo della blockchain di Bitcoin (Hash Rate). Quando il prezzo scende troppo, i minatori meno efficienti spengono le macchine e vanno in 'Capitolazione' (SMA 30 scende sotto SMA 60). Quando la rete si riprende (SMA 30 incrocia al rialzo SMA 60), si genera storicamente uno dei segnali di acquisto più potenti e affidabili del mercato crypto.""")
