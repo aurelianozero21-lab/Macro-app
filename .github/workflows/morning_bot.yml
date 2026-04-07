@@ -2,19 +2,18 @@ name: Morning Briefing Bot Telegram
 
 on:
   schedule:
-    # 05:30 UTC corrisponde alle 07:30 Ora Italiana (CEST)
     - cron: '30 5 * * *'
-  workflow_dispatch: # Questo ti permette di cliccare un tasto "Run" per testarlo quando vuoi
+  workflow_dispatch:
 
 jobs:
   esegui_bot:
     runs-on: ubuntu-latest
     steps:
       - name: Scarica il codice
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Aggiornato a v4
         
       - name: Installa Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # Aggiornato a v5
         with:
           python-version: '3.10'
           
