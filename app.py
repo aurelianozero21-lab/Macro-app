@@ -34,15 +34,19 @@ with st.spinner("📊 Sincronizzazione Dati Live e Motori FED..."):
         df_crypto = get_crypto_screener()
         fgi_val, fgi_class = get_crypto_fgi()
         tension_index, top_news, region_scores = analyze_geopolitics()
-        current = df.iloc[-1]
+        current = df.iloc[-1] if not df.empty else pd.Series()
         supabase_client = init_supabase()
     except Exception as e:
         st.error(f"Errore di connessione ai fornitori dati: {e}")
         st.stop()
 
+if current.empty:
+    st.error("Dati storici non disponibili. Riprova tra qualche minuto.")
+    st.stop()
+
 # Calcolo fase macro per l'AI
-fase_attuale = calcola_fase_avanzata(current['YieldCurve'], current['Z_S&P 500'], tension_index)
-ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current['Z_S&P 500']:.2f}, Shiller CAPE: {current.get('CAPE', 0):.2f}, Liquidità FED Delta 30g: {current['Liquidity_Delta_30d']:.2f}T, Oro Z-Score: {current['Z_Oro']:.2f}, Indice Geopolitica: {tension_index}/100, BTC Mayer: {current['Mayer_BTC']:.2f}."
+fase_attuale = calcola_fase_avanzata(current.get('YieldCurve', 0), current.get('Z_S&P 500', 0), tension_index)
+ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current.get('Z_S&P 500', 0):.2f}, Shiller CAPE: {current.get('CAPE', 0):.2f}, Liquidità FED Delta 30g: {current.get('Liquidity_Delta_30d', 0):.2f}T, Oro Z-Score: {current.get('Z_Oro', 0):.2f}, Indice Geopolitica: {tension_index}/100, BTC Mayer: {current.get('Mayer_BTC', 0):.2f}."
 
 # --- SIDEBAR: FUNZIONI PRO ---
 st.sidebar.markdown("---")
@@ -105,13 +109,13 @@ with tab1:
     else: st.success(f"🚀 **FASE DI MERCATO: {fase_attuale}**")
     
     col_live1, col_live2, col_live3, col_live4 = st.columns(4)
-    sp500_live = live_prices.get('^GSPC', current['S&P 500'])
-    vix_live = live_prices.get('^VIX', current['VIX'])
-    liq_delta = current['Liquidity_Delta_30d']
+    sp500_live = live_prices.get('^GSPC', current.get('S&P 500', 0))
+    vix_live = live_prices.get('^VIX', current.get('VIX', 0))
+    liq_delta = current.get('Liquidity_Delta_30d', 0)
     cape_val = current.get('CAPE', 0)
     
-    col_live1.metric("S&P 500 (Live)", f"{sp500_live:,.2f}", delta=f"Z-Score: {current['Z_S&P 500']:.2f}")
-    col_live2.metric("Liquidità FED Netta", f"${current['Fed_Liquidity_T']:.2f}T", delta=f"{'+' if liq_delta > 0 else ''}{liq_delta:.2f}T (30g)", delta_color="normal")
+    col_live1.metric("S&P 500 (Live)", f"{sp500_live:,.2f}", delta=f"Z-Score: {current.get('Z_S&P 500', 0):.2f}")
+    col_live2.metric("Liquidità FED Netta", f"${current.get('Fed_Liquidity_T', 0):.2f}T", delta=f"{'+' if liq_delta > 0 else ''}{liq_delta:.2f}T (30g)", delta_color="normal")
     col_live3.metric("Shiller P/E (CAPE)", f"{cape_val:.2f}", delta="> 30 Rischio Bolla", delta_color="inverse" if cape_val > 30 else "normal")
     col_live4.metric("VIX Index (Paura)", f"{vix_live:.2f}", delta="Volatilità", delta_color="off")
     
@@ -119,23 +123,24 @@ with tab1:
     st.header("🌊 Fed Liquidity Tracker")
     st.write("Analisi di correlazione tra stampa di moneta (FED) e S&P 500. La divergenza segnala manipolazione o inversione.")
     
-    fig_liq = go.Figure()
-    fig_liq.add_trace(go.Scatter(x=df.index, y=df['S&P 500'], name='S&P 500', yaxis='y1', line=dict(color='#00b894', width=2)))
-    fig_liq.add_trace(go.Scatter(x=df.index, y=df['Fed_Liquidity_T'], name='Net Liquidity ($T)', yaxis='y2', line=dict(color='#0984e3', width=2)))
-    fig_liq.update_layout(
-        yaxis=dict(title='S&P 500 (Punti)', side='left', showgrid=False),
-        yaxis2=dict(title='Liquidità FED ($ Trilioni)', side='right', overlaying='y', showgrid=False),
-        height=380, margin=dict(l=0, r=0, t=30, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)')
-    )
-    st.plotly_chart(fig_liq, use_container_width=True)
+    if 'Fed_Liquidity_T' in df.columns and 'S&P 500' in df.columns:
+        fig_liq = go.Figure()
+        fig_liq.add_trace(go.Scatter(x=df.index, y=df['S&P 500'], name='S&P 500', yaxis='y1', line=dict(color='#00b894', width=2)))
+        fig_liq.add_trace(go.Scatter(x=df.index, y=df['Fed_Liquidity_T'], name='Net Liquidity ($T)', yaxis='y2', line=dict(color='#0984e3', width=2)))
+        fig_liq.update_layout(
+            yaxis=dict(title='S&P 500 (Punti)', side='left', showgrid=False),
+            yaxis2=dict(title='Liquidità FED ($ Trilioni)', side='right', overlaying='y', showgrid=False),
+            height=380, margin=dict(l=0, r=0, t=30, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)')
+        )
+        st.plotly_chart(fig_liq, use_container_width=True)
 
     st.markdown("---")
     st.header("👁️ Smart Money & Divergenze")
     col_sm1, col_sm2 = st.columns(2)
     with col_sm1:
         st.subheader("🏦 Mercato del Credito (HYG)")
-        if current['Z_S&P 500'] > 0 and current['Z_High Yield'] < 0: st.error("⚠️ **DIVERGENZA RIBASSISTA:** Le banche vendono rischio.")
-        elif current['Z_S&P 500'] < 0 and current['Z_High Yield'] > 0: st.success("🟢 **DIVERGENZA RIALZISTA:** Lo Smart Money sta accumulando.")
+        if current.get('Z_S&P 500', 0) > 0 and current.get('Z_High Yield', 0) < 0: st.error("⚠️ **DIVERGENZA RIBASSISTA:** Le banche vendono rischio.")
+        elif current.get('Z_S&P 500', 0) < 0 and current.get('Z_High Yield', 0) > 0: st.success("🟢 **DIVERGENZA RIALZISTA:** Lo Smart Money sta accumulando.")
         else: st.info("⚖️ **CONVERGENZA:** Mercato azionario e credito sono allineati.")
     with col_sm2:
         st.subheader("🖨️ Direzione Liquidità")
@@ -169,7 +174,7 @@ with tab1:
 # --- TAB 2: CRYPTO ---
 with tab2:
     st.header("⚡ Crypto Cycle & Bitcoin Valuation")
-    mayer_btc = current['Mayer_BTC']
+    mayer_btc = current.get('Mayer_BTC', 0)
     col_pre1, col_pre2 = st.columns(2)
     with col_pre1:
         st.subheader("Fase Macro Bitcoin")
@@ -180,11 +185,11 @@ with tab2:
         st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=fgi_val, title={'text': f"Fear & Greed Index: {fgi_class}"}, gauge={'axis': {'range': [0, 100]}, 'steps': [{'range': [0, 45], 'color': "#e57373"}, {'range': [55, 100], 'color': "#81c784"}]})).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
 
     c1, c2, c3, c4 = st.columns(4)
-    btc_live = live_prices.get('BTC-USD', current['Bitcoin'])
+    btc_live = live_prices.get('BTC-USD', current.get('Bitcoin', 0))
     c1.metric("Prezzo BTC (Live)", f"${btc_live:,.0f}")
     c2.metric("Mayer Multiple", f"{mayer_btc:.2f}")
-    c3.metric("RSI (14 Giorni)", f"{current['RSI_BTC']:.0f}")
-    c4.metric("Distanza da ATH", f"{current['BTC_Drawdown']:.1f}%")
+    c3.metric("RSI (14 Giorni)", f"{current.get('RSI_BTC', 0):.0f}")
+    c4.metric("Distanza da ATH", f"{current.get('BTC_Drawdown', 0):.1f}%")
     
     if not df_crypto.empty: 
         st.markdown("---")
@@ -202,9 +207,10 @@ with tab3:
         for region, count in region_scores.items(): st.metric(region, f"{count} Alert Stampa", delta="🔥 Tensione Alta" if count >= 2 else "Calmo", delta_color="inverse" if count >= 2 else "normal")
     with col_g3:
         st.subheader("🛢️ Beni Rifugio Live")
-        gold_live = live_prices.get('GC=F', current['Oro'])
+        gold_live = live_prices.get('GC=F', current.get('Oro', 0))
         oil_live = live_prices.get('CL=F', 0.0)
-        st.metric("Oro / Oncia", f"${gold_live:,.1f}", delta=f"Z-Score Trend: {current['Z_Oro']:.2f}", delta_color="inverse" if current['Z_Oro'] > 1 else "normal")
+        z_oro = current.get('Z_Oro', 0)
+        st.metric("Oro / Oncia", f"${gold_live:,.1f}", delta=f"Z-Score Trend: {z_oro:.2f}", delta_color="inverse" if z_oro > 1 else "normal")
         st.metric("Petrolio WTI / Barile", f"${oil_live:,.2f}", delta="Termometro Inflazione", delta_color="off")
 
     if top_news:
@@ -237,18 +243,21 @@ with tab4:
             'Difesa': alloc_difesa / 100.0
         }
         
-        equity_portafoglio, equity_sp500, cagr, max_dd = calcola_backtest(df, pesi_utente)
-        
-        col_m1, col_m2, col_m3 = st.columns(3)
-        col_m1.metric("Valore Capitale Finale", f"${equity_portafoglio.iloc[-1]:,.2f}")
-        col_m2.metric("Rendimento Medio Annuo (CAGR)", f"{cagr*100:.2f}%")
-        col_m3.metric("Perdita Massima (Max Drawdown)", f"{max_dd*100:.2f}%", delta="Stress Storico", delta_color="inverse")
-        
-        fig_bt = go.Figure()
-        fig_bt.add_trace(go.Scatter(x=equity_portafoglio.index, y=equity_portafoglio, name='Tuo Portafoglio', line=dict(color='#00b894', width=2)))
-        fig_bt.add_trace(go.Scatter(x=equity_sp500.index, y=equity_sp500, name='S&P 500 (Benchmark)', line=dict(color='#b2bec3', width=1, dash='dash')))
-        fig_bt.update_layout(height=400, yaxis_title="Capitale Accumulato ($)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99))
-        st.plotly_chart(fig_bt, use_container_width=True)
+        try:
+            equity_portafoglio, equity_sp500, cagr, max_dd = calcola_backtest(df, pesi_utente)
+            
+            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1.metric("Valore Capitale Finale", f"${equity_portafoglio.iloc[-1]:,.2f}")
+            col_m2.metric("Rendimento Medio Annuo (CAGR)", f"{cagr*100:.2f}%")
+            col_m3.metric("Perdita Massima (Max Drawdown)", f"{max_dd*100:.2f}%", delta="Stress Storico", delta_color="inverse")
+            
+            fig_bt = go.Figure()
+            fig_bt.add_trace(go.Scatter(x=equity_portafoglio.index, y=equity_portafoglio, name='Tuo Portafoglio', line=dict(color='#00b894', width=2)))
+            fig_bt.add_trace(go.Scatter(x=equity_sp500.index, y=equity_sp500, name='S&P 500 (Benchmark)', line=dict(color='#b2bec3', width=1, dash='dash')))
+            fig_bt.update_layout(height=400, yaxis_title="Capitale Accumulato ($)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99))
+            st.plotly_chart(fig_bt, use_container_width=True)
+        except Exception as e:
+            st.error(f"Errore calcolo backtest: Assicurati di avere tutti i dati storici caricati ({e})")
     
     st.markdown("---")
     if st.button("🚀 Richiedi Valutazione Rischio AI", use_container_width=True):
