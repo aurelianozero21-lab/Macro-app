@@ -20,7 +20,7 @@ def init_supabase():
 # --- PREZZI IN TEMPO REALE (Cache di 60 secondi) ---
 @st.cache_data(ttl=60)
 def get_live_prices():
-    tickers = ['^GSPC', 'BTC-USD', 'GC=F', '^VIX']
+    tickers = ['^GSPC', 'BTC-USD', 'GC=F', '^VIX', 'CL=F']
     prices = {}
     for t in tickers:
         try:
