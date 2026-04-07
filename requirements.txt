@@ -8,3 +8,4 @@ xlsxwriter
 google-generativeai
 requests
 supabase
+lxml
