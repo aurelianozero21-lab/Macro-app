@@ -9,3 +9,6 @@ google-generativeai
 requests
 supabase
 lxml
+pyTelegramBotAPI==4.14.0
+supabase==2.3.4
+flask==3.0.0
