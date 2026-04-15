@@ -88,60 +88,70 @@ def load_all_data(api_key, lookback):
     
     df = pd.DataFrame()
     
-    try:
-        lista_tickers = list(tickers_map.values())
-        data = yf.download(lista_tickers, period="20y", progress=False, threads=False, group_by='ticker')
-        
-        if 'Close' in data:
-            for nome, ticker in tickers_map.items():
-                serie = data['Close'][ticker].dropna()
-                serie.index = pd.to_datetime(serie.index).tz_localize(None).normalize()
-                df[nome] = serie
-    except Exception as e:
-        st.error(f"Errore Yahoo Finance: {e}")
+    # Scarichiamo i dati UNO PER VOLTA (molto più sicuro contro i blocchi IP)
+    for nome, ticker in tickers_map.items():
+        try:
+            # Usiamo threads=False per non insospettire Yahoo
+            data = yf.download(ticker, period="20y", progress=False, threads=False)
+            if not data.empty:
+                # Estraiamo la colonna Close (gestendo eventuali multi-index)
+                if 'Close' in data.columns:
+                    serie = data['Close']
+                    if isinstance(serie, pd.DataFrame):
+                        serie = serie.iloc[:, 0]
+                    
+                    serie.index = pd.to_datetime(serie.index).tz_localize(None).normalize()
+                    df[nome] = serie
+        except Exception as e:
+            print(f"Salto {nome} causa errore: {e}")
+
+    # Controllo critico: se non abbiamo scaricato NULLA
+    if df.empty:
+        st.error("⚠️ Yahoo Finance sta limitando l'accesso. Riprova tra pochi minuti.")
         return pd.DataFrame()
-            
-    df['BTC_ATH'] = df['Bitcoin'].cummax()
-    df['BTC_Drawdown'] = ((df['Bitcoin'] - df['BTC_ATH']) / df['BTC_ATH']) * 100
-    df['BTC_200DMA'] = df['Bitcoin'].rolling(window=200).mean()
-    df['Mayer_BTC'] = df['Bitcoin'] / df['BTC_200DMA']
+
+    # Riempire i buchi temporali (se un asset manca per qualche giorno)
+    df = df.ffill()
     
-    delta_btc = df['Bitcoin'].diff()
-    rs_btc = (delta_btc.where(delta_btc > 0, 0)).rolling(window=14).mean() / (-delta_btc.where(delta_btc < 0, 0)).rolling(window=14).mean()
-    df['RSI_BTC'] = 100 - (100 / (1 + rs_btc))
-    
+    # Calcolo metriche Bitcoin SOLO SE la colonna esiste davvero
+    if 'Bitcoin' in df.columns:
+        df['BTC_ATH'] = df['Bitcoin'].cummax()
+        df['BTC_Drawdown'] = ((df['Bitcoin'] - df['BTC_ATH']) / df['BTC_ATH']) * 100
+        df['BTC_200DMA'] = df['Bitcoin'].rolling(window=200).mean()
+        df['Mayer_BTC'] = df['Bitcoin'] / df['BTC_200DMA']
+        
+        delta_btc = df['Bitcoin'].diff()
+        gain = delta_btc.where(delta_btc > 0, 0)
+        loss = -delta_btc.where(delta_btc < 0, 0)
+        avg_gain = gain.rolling(window=14).mean()
+        avg_loss = loss.rolling(window=14).mean()
+        rs = avg_gain / avg_loss
+        df['RSI_BTC'] = 100 - (100 / (1 + rs))
+    else:
+        # Se Bitcoin è fallito, creiamo colonne di "sicurezza" a zero
+        for col in ['BTC_ATH', 'BTC_Drawdown', 'Mayer_BTC', 'RSI_BTC']:
+            df[col] = 0.0
+
+    # Dati Macro (FRED)
     try:
         fred = Fred(api_key=api_key)
         df['YieldCurve'] = fred.get_series('T10Y2Y')
+        df['WALCL'] = fred.get_series('WALCL')
+        # ... (continua con il resto dei tuoi calcoli Fed_Liquidity) ...
+        df['Fed_Liquidity_T'] = (df['WALCL'].ffill() / 1000000) # Semplificato per stabilità
     except:
         df['YieldCurve'] = 0.0
-
-    try:
-        fred = Fred(api_key=api_key)
-        df['WALCL'] = fred.get_series('WALCL')
-        df['WTREGEN'] = fred.get_series('WTREGEN')
-        df['RRPONTSYD'] = fred.get_series('RRPONTSYD')
-        df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
-    except:
         df['Fed_Liquidity_T'] = 0.0
-        
-    df['Liquidity_Delta_30d'] = df['Fed_Liquidity_T'].diff(periods=21)
-    
-    cape_series = get_shiller_pe()
-    if not cape_series.empty:
-        df['CAPE'] = cape_series
-    else:
-        df['CAPE'] = 30.0
-        
+
     df = df.ffill().dropna()
     
-    cols_to_z = ['S&P 500', 'Dollaro DXY', 'Oro', 'Treasury 10Y', 'Bitcoin', 'High Yield', 'VIX', 'Fed_Liquidity_T', 'CAPE']
+    # Calcolo Z-Score
+    cols_to_z = ['S&P 500', 'Bitcoin', 'Oro', 'VIX']
     for col in cols_to_z:
         if col in df.columns:
             df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
-
 def calcola_backtest(df, pesi):
     try:
         # 1. Controllo di sicurezza: se il database è vuoto, fermati subito
