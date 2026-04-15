@@ -4,29 +4,36 @@ import plotly.express as px
 import plotly.graph_objects as go
 from engine import *
 
-# Configurazione Pagina
+# --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Macroeconomia", page_icon="🏛️", layout="wide")
 st.title("🏛️ Macro & Liquidity")
+st.write("Analisi approfondita dei flussi di capitale, liquidità istituzionale e stagionalità.")
 
-# --- CARICAMENTO DATI (Necessario per far funzionare i grafici sotto) ---
-lookback = 90 # Valore di default
-with st.spinner("Caricamento dati macro..."):
+# --- CARICAMENTO DATI (Istanteo tramite Cache) ---
+lookback = 90
+with st.spinner("Sincronizzazione dati Macro..."):
     try:
         df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
         live_prices = get_live_prices()
         df_etfs = get_etf_screener()
         tension_index, _, _ = analyze_geopolitics()
-        current = df.iloc[-1]
+        current = df.iloc[-1] if not df.empty else pd.Series()
         
-        # Calcolo variabili necessarie
+        # Variabili calcolate
         fase_attuale = calcola_fase_avanzata(current.get('YieldCurve', 0), current.get('Z_S&P 500', 0), tension_index)
         liq_delta = current.get('Liquidity_Delta_30d', 0)
         df_sp500_corrente, df_sp500_storico = calcola_stagionalita(df, 'S&P 500')
     except Exception as e:
-        st.error(f"Errore tecnico: {e}")
+        st.error(f"Errore tecnico nel caricamento dati: {e}")
         st.stop()
 
-# --- IL TUO CODICE ORIGINALE (TAB 1) ---
+if current.empty:
+    st.warning("Dati non disponibili al momento.")
+    st.stop()
+
+# ==========================================
+# CORPO DELLA PAGINA MACRO
+# ==========================================
 
 st.header("🚦 Semaforo Macro Intelligente")
 if "1." in fase_attuale: st.error(f"🚨 **FASE DI MERCATO: {fase_attuale}**")
@@ -36,7 +43,6 @@ else: st.success(f"🚀 **FASE DI MERCATO: {fase_attuale}**")
 col_live1, col_live2, col_live3, col_live4 = st.columns(4)
 sp500_live = live_prices.get('^GSPC', current.get('S&P 500', 0))
 vix_live = live_prices.get('^VIX', current.get('VIX', 0))
-liq_delta = current.get('Liquidity_Delta_30d', 0)
 cape_val = current.get('CAPE', 0)
 
 col_live1.metric("S&P 500 (Live)", f"{sp500_live:,.2f}", delta=f"Z-Score: {current.get('Z_S&P 500', 0):.2f}")
