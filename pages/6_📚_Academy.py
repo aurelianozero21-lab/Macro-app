@@ -1,124 +1,98 @@
 import streamlit as st
-import pandas as pd
 
 # --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="Quant Academy", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Academy", page_icon="📚", layout="wide")
 
-st.title("📚 Quant Academy: Masterclass Istituzionale")
-st.write("I principi matematici, economici e statistici che alimentano l'intelligenza di questa piattaforma. Capire il *perché* le cose accadono è l'unico vantaggio competitivo sui mercati.")
+st.title("📚 Academy: Investire con Semplicità")
+st.write("Dimentica le formule matematiche complesse e i paroloni di Wall Street. In questa sezione ti spieghiamo come funzionano i mercati usando il buon senso e semplici analogie della vita reale.")
 
 st.markdown("---")
 
-# Divisione in 4 sottomoduli
-mod_macro, mod_risk, mod_crypto, mod_math = st.tabs([
-    "🏛️ 1: Motori Macroeconomici", 
-    "⚖️ 2: Valutazione & Sentiment", 
-    "⛓️ 3: Dinamiche On-Chain",
-    "🧮 4: Matematica di Portafoglio"
+# Divisione in 4 sottomoduli semplici
+tab_macro, tab_azioni, tab_crypto, tab_app = st.tabs([
+    "🌍 1. Le Basi dell'Economia", 
+    "📈 2. Capire le Azioni", 
+    "⚡ 3. Il Mondo Crypto",
+    "🛠️ 4. Guida all'Applicazione"
 ])
 
 # ==========================================
-# MODULO 1: MACROECONOMIA
+# MODULO 1: MACROECONOMIA BASE
 # ==========================================
-with mod_macro:
-    st.header("🌊 La Liquidità Netta (Net Liquidity)")
-    st.write("Nel mercato moderno, la quantità di denaro nel sistema guida i prezzi degli asset a rischio (Azioni, Crypto) più degli utili aziendali.")
+with tab_macro:
+    st.header("🌍 Le forze che muovono il mondo")
+    st.write("L'economia funziona esattamente come il motore di un'auto. Ci sono acceleratori e freni che determinano la velocità a cui andiamo.")
     
-    st.latex(r"Net\ Liquidity = Total\ Assets\ (FED) - TGA - RRP")
-    
-    col_l1, col_l2 = st.columns(2)
-    with col_l1:
-        st.info("**Componenti:**\n* **Total Assets:** Il bilancio della FED (denaro stampato).\n* **TGA (Treasury General Account):** Il conto corrente del governo. Se il governo lo riempie, toglie soldi al mercato.\n* **RRP (Reverse Repo):** Parcheggio di liquidità per le banche.")
-    with col_l2:
-        st.error("**Regola Operativa:**\nQuando la Liquidità scende (QT), i mercati faticano e i multipli si comprimono. È il momento di difendersi. Quando la Liquidità sale, è il momento di prendere rischio (Buy the dip).")
+    st.subheader("1. I Tassi di Interesse (Il Costo del Denaro)")
+    st.write("Immagina i tassi di interesse come il 'prezzo' per affittare i soldi. Chi decide questo prezzo? Le Banche Centrali (come la FED in America o la BCE in Europa).")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.success("**Tassi Bassi (Acceleratore) 🟢**\n\nPrendere in prestito soldi costa pochissimo. Le aziende chiedono prestiti per espandersi, le persone fanno mutui per comprare case. L'economia corre e i mercati azionari salgono.")
+    with col2:
+        st.error("**Tassi Alti (Freno) 🔴**\n\nPrendere soldi in prestito costa troppo. Le aziende smettono di assumere, la gente smette di comprare case. L'economia rallenta e i mercati scendono.")
 
     st.markdown("---")
     
-    st.header("☠️ L'Inversione della Curva dei Rendimenti")
-    st.write("La differenza di rendimento tra i Titoli di Stato a 10 anni (Lungo Termine) e a 2 anni (Breve Termine). Ha previsto con il 100% di precisione ogni recessione dal 1970.")
-    
-    st.latex(r"Spread = Yield_{10Y} - Yield_{2Y}")
-    
-    c_y1, c_y2, c_y3 = st.columns(3)
-    c_y1.success("**Curva Normale (Spread > 0)**\n\nL'economia cresce. Il rischio a lungo termine è pagato di più. Fase costruttiva per le azioni.")
-    c_y2.error("**Curva Invertita (Spread < 0)**\n\nIl mercato teme il breve termine. Iniziano i campanelli d'allarme, ma le azioni spesso fanno un ultimo rally (Late Cycle).")
-    c_y3.warning("**Re-Steepening (Ritorno a > 0)**\n\nLa curva torna positiva velocemente perché le banche centrali tagliano i tassi in preda al panico. **Storicamente, è qui che iniziano i veri crolli azionari.**")
+    st.subheader("2. L'Inflazione (La tassa invisibile)")
+    st.write("L'inflazione è l'aumento dei prezzi nel tempo. Se l'inflazione è al 5%, significa che il carrello della spesa che l'anno scorso pagavi 100€, oggi ti costa 105€.")
+    st.info("💡 **Perché è importante?** Se tieni i tuoi soldi fermi sul conto corrente mentre c'è inflazione, stai tecnicamente perdendo potere d'acquisto ogni singolo giorno. Investire serve proprio a far crescere i tuoi soldi più velocemente di quanto salgono i prezzi.")
 
 # ==========================================
-# MODULO 2: VALUTAZIONE E SENTIMENT
+# MODULO 2: AZIONI E MERCATI
 # ==========================================
-with mod_risk:
-    st.header("🏛️ Shiller P/E (CAPE Ratio) e i suoi limiti")
-    st.write("Valuta l'S&P 500 dividendo il prezzo per la media degli utili degli ultimi 10 anni aggiustati per l'inflazione, smussando così le fluttuazioni economiche di breve periodo.")
+with tab_azioni:
+    st.header("📈 Come funziona la Borsa")
+    
+    st.subheader("Cos'è un'Azione e cos'è l'S&P 500?")
+    st.write("Comprare un'azione significa comprare un piccolissimo pezzetto di un'azienda vera (come Apple, Amazon o Ferrari). Se l'azienda vende di più e fa profitti, il tuo pezzetto vale di più.")
+    st.write("L'**S&P 500** è semplicemente un 'cesto' (chiamato Indice o ETF) che contiene le 500 aziende più grandi e forti d'America. Comprando l'S&P 500, compri un pezzetto di tutta l'economia americana in un colpo solo, abbassando tantissimo il rischio.")
+
+    st.markdown("---")
+
+    st.subheader("La Regola d'Oro: Diversificazione e Rischio")
+    st.write("Il rischio in finanza non significa solo 'perdere soldi', ma indica quanto il prezzo fa 'su e giù' in modo violento (Volatilità).")
+    
+    col_a1, col_a2 = st.columns(2)
+    with col_a1:
+        st.warning("**Tutte le uova in un paniere**\n\nSe compri solo azioni di una singola azienda tecnologica e quell'azienda va in crisi, perdi tutto. Questo è il rischio che vogliamo evitare.")
+    with col_a2:
+        st.success("**Il Portafoglio Bilanciato**\n\nMescolando Azioni (che crescono nel tempo), Obbligazioni/Bonds (che sono come prestiti sicuri) e Cash, crei un portafoglio che resiste a qualsiasi tempesta.")
+
+# ==========================================
+# MODULO 3: CRYPTO
+# ==========================================
+with tab_crypto:
+    st.header("⚡ Il Mercato delle Criptovalute")
+    
+    st.subheader("Bitcoin vs Altcoin")
+    st.write("Il mercato crypto si divide in due grandi categorie, e confonderle è l'errore più costoso che puoi fare:")
     
     st.markdown("""
-    | Valore CAPE | Significato Storico | Posizionamento Statistico |
-    | :--- | :--- | :--- |
-    | **Sotto 15** | Sottovalutazione Estrema | Accumulo aggressivo (Equity Risk Premium altissimo) |
-    | **15 - 25** | Fair Value / Media Storica | Portafoglio bilanciato standard |
-    | **25 - 30** | Sopravvalutazione | Rotazione verso settori difensivi / value |
-    | **Sopra 30** | **Bolla Speculativa** | Riduzione drastica del rischio (1929, 2000, 2021) |
+    * 🟠 **Bitcoin (BTC):** Pensalo come l'"Oro Digitale". È nato per essere una riserva di valore sicura, limitata (non ce ne saranno mai più di 21 milioni) e che nessuno può censurare o bloccare.
+    * 🔵 **Altcoin (Tutte le altre):** Pensale come delle "Startup Tecnologiche". Provano a creare nuove tecnologie (velocità, contratti intelligenti, giochi). Alcune faranno il +1000%, ma il 95% di esse fallirà scomparendo per sempre.
     """)
-    
-    with st.expander("🔍 Il limite del CAPE (L'effetto Tassi di Interesse)"):
-        st.write("Il CAPE non tiene conto dei tassi di interesse. Un CAPE a 30 è pericolosissimo se i tassi sono al 5%, ma è 'giustificabile' se i tassi sono allo 0% (perché non ci sono alternative di rendimento). I veri quantitativi usano l'**ECY (Excess CAPE Yield)** per confrontarlo con i rendimenti dei bond.")
 
     st.markdown("---")
     
-    st.header("📊 VIX & Term Structure (Il VERO indicatore di Paura)")
-    st.write("Tutti conoscono il VIX (Indice di Volatilità), ma pochi sanno leggerne la struttura. Non conta solo il numero, conta la forma della curva della volatilità futura.")
-    
-    col_v1, col_v2 = st.columns(2)
-    with col_v1:
-        st.success("**Contango (Normalità)**\n\nIl VIX a 1 mese è più BASSO del VIX a 3 mesi. Il mercato è tranquillo, si aspetta che i rischi siano lontani nel tempo. Trend rialzista intatto.")
-    with col_v2:
-        st.error("**Backwardation (Panico)**\n\nIl VIX a 1 mese schizza SOPRA il VIX a 3 mesi. Gli operatori pagano cifre folli per assicurarsi contro un crollo *immediato*. Segna spesso i minimi di mercato (Bottom).")
+    st.subheader("I Cicli del Bitcoin (L'Halving)")
+    st.write("A differenza dei soldi normali che possono essere stampati all'infinito, la produzione di nuovi Bitcoin è regolata da un timer matematico. Ogni 4 anni, la quantità di nuovi Bitcoin creati ogni giorno viene tagliata esattamente a metà. Questo evento si chiama **Halving**.")
+    st.info("💡 **Cosa significa per i prezzi?** Storicamente, tagliando la nuova offerta a metà, se la domanda delle persone rimane uguale o sale, il prezzo è costretto a salire. Questo crea i famosi 'Cicli' di 4 anni del mercato crypto.")
 
 # ==========================================
-# MODULO 3: ON-CHAIN & CRYPTO
+# MODULO 4: GUIDA ALL'APP
 # ==========================================
-with mod_crypto:
-    st.header("⛓️ Hash Ribbon e la Capitolazione")
-    st.write("Legge la redditività industriale della rete Bitcoin. Quando i prezzi crollano o l'algoritmo diventa troppo difficile (Difficulty Adjustment), i minatori vanno in perdita, spengono l'hardware e scaricano BTC sul mercato.")
+with tab_app:
+    st.header("🛠️ Come leggere i nostri indicatori")
+    st.write("In questa applicazione usiamo dei sensori che sembrano complessi, ma che hanno significati molto pratici. Ecco un dizionario veloce:")
     
-    c_hr1, c_hr2, c_hr3 = st.columns(3)
-    c_hr1.error("**1. Capitulation**\n\nSMA(30) < SMA(60). Minatori in crisi di liquidità. Pressione di vendita massima.")
-    c_hr2.warning("**2. Recovery**\n\nL'Hash Rate smette di crollare. Le macchine obsolete sono fuori, il mercato assorbe le vendite.")
-    c_hr3.success("**3. Buy Signal**\n\nSMA(30) > SMA(60). Ritorno alla redditività. Uno dei segnali di acquisto più affidabili a lungo termine.")
-    
-    st.markdown("---")
+    with st.expander("📉 Cos'è la Curva dei Rendimenti (Yield Curve)?"):
+        st.write("Normalmente, se presti soldi per 10 anni vieni pagato di più rispetto a prestarli per 2 anni (perché il tempo è un rischio). Quando succede il contrario (Inversione), significa che le banche hanno una paura tremenda del futuro immediato. È l'allarme antincendio più affidabile per le recessioni.")
 
-    st.header("⚖️ MVRV Z-Score (Market Value vs Realized Value)")
-    st.write("L'indicatore definitivo per identificare Top e Bottom del Bitcoin. Confronta la capitalizzazione attuale (Market Cap) con il valore a cui sono state mosse per l'ultima volta tutte le monete (Realized Cap).")
-    
-    st.latex(r"MVRV\ Z-Score = \frac{Market\ Cap - Realized\ Cap}{StdDev(Market\ Cap)}")
-    
-    st.info("**Lettura:**\n* **Zona Verde (Z-Score < 0.1):** Accumulo generazione. Il mercato valuta BTC meno di quanto è costato storicamente agli investitori.\n* **Zona Rossa (Z-Score > 7.0):** Bolla pura. Tutti sono in profitti mostruosi, incentivo matematico a vendere altissimo.")
+    with st.expander("😰 Cos'è il VIX (Termometro del Panico)?"):
+        st.write("Misura quanta 'assicurazione' stanno comprando i grandi fondi contro un crollo del mercato. Se il VIX è basso, c'è calma e ottimismo. Se il VIX schizza alle stelle, c'è panico totale (che spesso si rivela essere il momento migliore per comprare a sconto).")
 
-# ==========================================
-# MODULO 4: MATEMATICA DI PORTAFOGLIO
-# ==========================================
-with mod_math:
-    st.header("🧮 L'Aritmetica della Rovina (Drawdown Math)")
-    st.write("Il cervello umano pensa in modo lineare, ma le perdite finanziarie funzionano in modo asimmetrico. Maggiore è la perdita (Drawdown), esponenzialmente maggiore dovrà essere il guadagno solo per tornare in pari.")
-    
-    # Tabella matematica del drawdown
-    dd_data = {
-        "Perdita Subita (Drawdown)": ["-10%", "-20%", "-33%", "-50%", "-75%", "-90%"],
-        "Performance necessaria per recuperare": ["+11%", "+25%", "+50%", "+100%", "+300%", "+900%"]
-    }
-    st.table(pd.DataFrame(dd_data))
-    st.write("Ecco perché il **Risk Management (Gestione del Rischio)** e la diversificazione (Bond/Oro) contano più della capacità di scegliere le azioni giuste.")
-    
-    st.markdown("---")
-    
-    st.header("⚖️ Sharpe Ratio (Rendimento Aggiustato per il Rischio)")
-    st.write("Tutti sanno calcolare il guadagno, ma quanto rischio hai corso per ottenerlo? Lo Sharpe Ratio divide il tuo rendimento in eccesso (rispetto a un investimento senza rischio, come i Bot BOT) per la volatilità del tuo portafoglio.")
-    
-    st.latex(r"Sharpe\ Ratio = \frac{R_p - R_f}{\sigma_p}")
-    
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.write("**Legenda:**\n* $R_p$ = Rendimento del tuo portafoglio\n* $R_f$ = Tasso privo di rischio (Risk-Free Rate)\n* $\sigma_p$ = Deviazione standard (Volatilità)")
-    with col_s2:
-        st.write("**Come leggerlo:**\n* **< 1.0:** Sub-ottimale. Stai rischiando troppo per i rendimenti che ottieni.\n* **1.0 - 2.0:** Ottimo portafoglio.\n* **> 2.0:** Performance da fuoriclasse istituzionale.")
+    with st.expander("📉 Cos'è il Max Drawdown (nella scheda Risk Manager)?"):
+        st.write("È un concetto fondamentale per la sopravvivenza. Indica **la perdita più grande che avresti subito** se avessi comprato nel momento peggiore assoluto. Se il tuo portafoglio ha un Max Drawdown del -40%, chiediti: *'Riuscirei a dormire la notte vedendo i miei 10.000€ scendere a 6.000€ senza vendere per il panico?'*")
+
+    with st.expander("⛓️ Cos'è l'Hash Ribbon (nella scheda Crypto)?"):
+        st.write("I 'Minatori' di Bitcoin sono aziende giganti con capannoni pieni di computer. Quando il prezzo di Bitcoin scende troppo, queste aziende vanno in perdita e spengono i computer (Capitolazione). L'Hash Ribbon ci avvisa quando hanno smesso di spegnere i computer: storicamente, quello è il fondo del barile e un ottimo momento per investire.")
