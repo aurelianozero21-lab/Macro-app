@@ -78,7 +78,7 @@ else:
     # ==========================================
     st.header("📈 Analisi Storica (Backtest)")
     
-  eq_port, eq_bench, cagr, max_dd = calcola_backtest(df, pesi)
+    eq_port, eq_bench, cagr, max_dd = calcola_backtest(df, pesi)
     
     # SALVAVITA: Se i dati sono vuoti a causa di un errore API, ferma il crash
     if eq_port.empty or len(eq_port) == 0:
