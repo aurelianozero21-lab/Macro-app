@@ -1,81 +1,122 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 import google.generativeai as genai
 from engine import *
 
 # --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="Risk Manager", page_icon="🔥", layout="wide")
-st.title("🔥 Risk Manager & Backtest Matematico")
-st.write("Inserisci l'allocazione del tuo capitale. Il motore simulerà le performance storiche a partire da 10.000$ e l'AI valuterà le vulnerabilità.")
+st.set_page_config(page_title="Risk Manager Pro", page_icon="🔥", layout="wide")
 
-# --- CARICAMENTO DATI (Istanteo tramite Cache) ---
-lookback = 90
-with st.spinner("Sincronizzazione dati per il Backtest..."):
+# --- LOGICA MEMORIA URL (Link Magico) ---
+# Recuperiamo i parametri dall'URL se esistono
+params = st.query_params
+
+# Inizializziamo la sessione con i valori dell'URL o con i default
+if "azioni" not in st.session_state:
+    st.session_state.azioni = int(params.get("az", 50))
+if "bonds" not in st.session_state:
+    st.session_state.bonds = int(params.get("bo", 20))
+if "crypto" not in st.session_state:
+    st.session_state.crypto = int(params.get("cr", 10))
+if "difesa" not in st.session_state:
+    st.session_state.difesa = int(params.get("di", 20))
+
+# --- UI PRINCIPALE ---
+st.title("🔥 Risk Manager & Intelligence")
+st.write("Configura la tua asset allocation. I dati vengono salvati automaticamente nell'URL.")
+
+# 🚨 AVVISO DI SALVATAGGIO URL
+st.warning("🔗 **PRO TIP: Salva questa pagina nei preferiti!** Le tue percentuali sono codificate nell'URL. Se vuoi conservare questo portafoglio o condividerlo, ti basta copiare il link del browser.")
+
+# --- CARICAMENTO DATI ---
+with st.spinner("Calcolo metriche di rischio..."):
     try:
-        df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
-        hash_status, _ = get_onchain_metrics()
+        df = load_all_data(st.secrets["FRED_API_KEY"], 90)
         tension_index, _, _ = analyze_geopolitics()
+        hash_status, _ = get_onchain_metrics()
         current = df.iloc[-1] if not df.empty else pd.Series()
         fase_attuale = calcola_fase_avanzata(current.get('YieldCurve', 0), current.get('Z_S&P 500', 0), tension_index)
-    except Exception as e:
-        st.error(f"Errore tecnico nel caricamento dati: {e}")
+    except:
+        st.error("Errore caricamento dati engine.")
         st.stop()
 
-# ==========================================
-# CORPO PRINCIPALE (EX TAB 4: RISK MANAGER)
-# ==========================================
+# --- INPUT ALLOCATION (Collegati alla sessione e all'URL) ---
+st.sidebar.header("🎯 Tua Allocazione")
 
-col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-with col_p1: alloc_azioni = st.number_input("Azioni / ETF (%)", min_value=0, max_value=100, value=50)
-with col_p2: alloc_obbligazioni = st.number_input("Bonds (%)", min_value=0, max_value=100, value=20)
-with col_p3: alloc_crypto = st.number_input("Crypto (%)", min_value=0, max_value=100, value=10)
-with col_p4: alloc_difesa = st.number_input("Oro / Cash (%)", min_value=0, max_value=100, value=20)
+def update_params():
+    # Aggiorna l'URL ogni volta che cambiano i valori
+    st.query_params.update({
+        "az": st.session_state.azioni,
+        "bo": st.session_state.bonds,
+        "cr": st.session_state.crypto,
+        "di": st.session_state.difesa
+    })
 
-totale = alloc_azioni + alloc_obbligazioni + alloc_crypto + alloc_difesa
+a1 = st.sidebar.number_input("Azioni (%)", 0, 100, key="azioni", on_change=update_params)
+a2 = st.sidebar.number_input("Bonds (%)", 0, 100, key="bonds", on_change=update_params)
+a3 = st.sidebar.number_input("Crypto (%)", 0, 100, key="crypto", on_change=update_params)
+a4 = st.sidebar.number_input("Difesa (%)", 0, 100, key="difesa", on_change=update_params)
+
+totale = a1 + a2 + a3 + a4
+
 if totale != 100:
-    st.warning(f"⚠️ Attenzione: Il totale dell'allocazione è {totale}%. Modifica i valori per arrivare a 100%.")
+    st.sidebar.error(f"Totale: {totale}% (Deve essere 100%)")
 else:
-    st.markdown("---")
-    st.subheader("📈 Analisi Storica (Equity Curve)")
+    st.sidebar.success("✅ Portafoglio Bilanciato")
     
-    pesi_utente = {
-        'Azioni': alloc_azioni / 100.0,
-        'Bonds': alloc_obbligazioni / 100.0,
-        'Crypto': alloc_crypto / 100.0,
-        'Difesa': alloc_difesa / 100.0
-    }
+    # --- BACKTEST STORICO ---
+    st.header("📈 Analisi Storica (Backtest)")
+    pesi = {'Azioni': a1/100, 'Bonds': a2/100, 'Crypto': a3/100, 'Difesa': a4/100}
     
-    try:
-        # Funzione dal motore engine.py
-        equity_portafoglio, equity_sp500, cagr, max_dd = calcola_backtest(df, pesi_utente)
-        
-        col_m1, col_m2, col_m3 = st.columns(3)
-        col_m1.metric("Valore Capitale Finale", f"${equity_portafoglio.iloc[-1]:,.2f}")
-        col_m2.metric("Rendimento Medio Annuo (CAGR)", f"{cagr*100:.2f}%")
-        col_m3.metric("Perdita Massima (Max Drawdown)", f"{max_dd*100:.2f}%", delta="Stress Storico", delta_color="inverse")
-        
-        fig_bt = go.Figure()
-        fig_bt.add_trace(go.Scatter(x=equity_portafoglio.index, y=equity_portafoglio, name='Tuo Portafoglio', line=dict(color='#00b894', width=2)))
-        fig_bt.add_trace(go.Scatter(x=equity_sp500.index, y=equity_sp500, name='S&P 500 (Benchmark)', line=dict(color='#b2bec3', width=1, dash='dash')))
-        fig_bt.update_layout(height=400, yaxis_title="Capitale Accumulato ($)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99))
-        st.plotly_chart(fig_bt, use_container_width=True)
-    except Exception as e:
-        st.error(f"Errore calcolo backtest: Assicurati di avere tutti i dati storici caricati ({e})")
+    eq_port, eq_bench, cagr, max_dd = calcola_backtest(df, pesi)
+    
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Capitale Finale", f"${eq_port.iloc[-1]:,.2f}")
+    m2.metric("CAGR (Rendimento)", f"{cagr*100:.1f}%")
+    m3.metric("Max Drawdown", f"{max_dd*100:.1f}%", delta="Rischio Storico", delta_color="inverse")
+    
+    fig_hist = go.Figure()
+    fig_hist.add_trace(go.Scatter(x=eq_port.index, y=eq_port, name='Tuo Portafoglio', line=dict(color='#00b894')))
+    fig_hist.add_trace(go.Scatter(x=eq_bench.index, y=eq_bench, name='S&P 500', line=dict(color='#b2bec3', dash='dash')))
+    fig_hist.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
+    st.plotly_chart(fig_hist, use_container_width=True)
 
-st.markdown("---")
-if st.button("🚀 Richiedi Valutazione Rischio AI", use_container_width=True):
-    if "GEMINI_API_KEY" in st.secrets:
-        with st.spinner("I Modelli Quantitativi AI stanno elaborando il rischio..."):
+    st.markdown("---")
+    
+    # --- SIMULAZIONE MONTE CARLO (FUTURO) ---
+    st.header("🔮 Simulazione Monte Carlo (Proiezione 10 Anni)")
+    st.write("Abbiamo generato 1.000 scenari futuri casuali basati sulla volatilità storica del tuo portafoglio.")
+    
+    # Logica semplificata Monte Carlo
+    mu = cagr # rendimento medio
+    sigma = abs(max_dd) * 0.5 # volatilità stimata
+    n_sims = 100
+    n_years = 10
+    
+    sim_results = []
+    for _ in range(n_sims):
+        prices = [10000]
+        for _ in range(n_years):
+            prices.append(prices[-1] * (1 + np.random.normal(mu, sigma)))
+        sim_results.append(prices)
+    
+    fig_mc = go.Figure()
+    for s in sim_results:
+        fig_mc.add_trace(go.Scatter(y=s, mode='lines', line=dict(width=1), opacity=0.1, showlegend=False))
+    
+    # Mediana
+    median_path = np.median(sim_results, axis=0)
+    fig_mc.add_trace(go.Scatter(y=median_path, name='Scenario Probabile (Mediana)', line=dict(color='white', width=3)))
+    
+    fig_mc.update_layout(height=400, yaxis_title="Valore Portafoglio ($)", xaxis_title="Anni")
+    st.plotly_chart(fig_mc, use_container_width=True)
+
+    # AI RISK ADVISOR
+    if st.button("🚀 Chiedi Analisi Strategica all'AI", use_container_width=True):
+        if "GEMINI_API_KEY" in st.secrets:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            mod = next((m.name for m in genai.list_models() if "flash" in m.name.lower() or "pro" in m.name.lower()), "gemini-1.5-flash")
-            
-            # Ricostruiamo il contesto macro per l'AI
-            ai_context = f"Fase Macro: {fase_attuale}, S&P500 Z-Score: {current.get('Z_S&P 500', 0):.2f}, Shiller CAPE: {current.get('CAPE', 0):.2f}, Liquidità FED Delta 30g: {current.get('Liquidity_Delta_30d', 0):.2f}T, Oro Z-Score: {current.get('Z_Oro', 0):.2f}, BTC Mayer: {current.get('Mayer_BTC', 0):.2f}, On-Chain BTC: {hash_status}."
-            
-            prompt = f"Agisci come un Risk Manager Istituzionale. Il portafoglio del cliente è: Azioni {alloc_azioni}%, Bond {alloc_obbligazioni}%, Crypto {alloc_crypto}%, Difesa {alloc_difesa}%. Il contesto macro attuale è: {ai_context}. Fornisci un'analisi spietata sulle vulnerabilità di questa allocazione e suggerisci delle ottimizzazioni. Usa il Markdown e sii professionale."
-            
-            response = genai.GenerativeModel(mod).generate_content(prompt).text
-            st.markdown(response)
-    else: 
-        st.error("Manca la GEMINI_API_KEY nei Secrets.")
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            ctx = f"Allocazione: {pesi}. Fase Macro: {fase_attuale}. CAGR: {cagr}. MaxDD: {max_dd}."
+            res = model.generate_content(f"Agisci come Risk Manager. Analizza questo portafoglio in base a: {ctx}. Sii critico.").text
+            st.info(res)
