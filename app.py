@@ -70,28 +70,36 @@ def to_excel(dataframe):
     return output.getvalue()
 st.sidebar.download_button("📥 Esporta Dati (Excel)", data=to_excel(df), file_name="macro_data.xlsx", mime="application/vnd.ms-excel")
 
+# --- SIDEBAR: REPORT AI ISTANTANEO ---
 st.sidebar.markdown("---")
-st.sidebar.subheader("🗞️ Generatore Report AI")
-if "morning_brief" not in st.session_state: st.session_state.morning_brief = ""
+st.sidebar.subheader("🎯 Analisi Rapida AI")
 
 if st.sidebar.button("🤖 Genera Report Istantaneo", use_container_width=True):
     if "GEMINI_API_KEY" in st.secrets:
-        with st.sidebar.status("L'AI sta analizzando i mercati..."):
+        with st.sidebar.status("L'AI sta leggendo i mercati..."):
             try:
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                # Seleziona il modello veloce
                 model_name = next((m.name for m in genai.list_models() if "flash" in m.name.lower()), "gemini-1.5-flash")
-                st.session_state.briefing_home = genai.GenerativeModel(model_name).generate_content(f"Agisci come un analista quantitativo. Riassumi lo stato del mercato basandoti su: {ai_context}. Sii breve e incisivo.").text
+                model = genai.GenerativeModel(model_name)
+                
+                # Chiamata all'AI
+                prompt = f"Sei un analista macro. Riassumi i segnali chiave di oggi: {ai_context}. Sii telegrafico, solo segnali operativi."
+                risposta = model.generate_content(prompt).text
+                
+                # SALVIAMO NELLO STATO DELLA SESSIONE
+                st.session_state.sidebar_report = risposta
             except Exception as e:
-                if "ResourceExhausted" in str(e):
-                    st.error("⚠️ Troppe richieste all'Intelligenza Artificiale. Il server si sta raffreddando, riprova tra 60 secondi.")
-                else:
-                    st.error(f"Errore di connessione AI: {e}")
-    else: st.sidebar.error("Chiave AI mancante.")
+                st.sidebar.error(f"Errore AI: {e}")
+    else:
+        st.sidebar.error("Chiave API mancante.")
 
-if st.session_state.morning_brief:
-    with st.sidebar.expander("📄 Leggi il Report", expanded=True):
-        st.markdown(st.session_state.morning_brief)
-
+# MOSTRIAMO IL REPORT (Fuori dal blocco del pulsante, così non sparisce)
+if "sidebar_report" in st.session_state:
+    st.sidebar.info(st.session_state.sidebar_report)
+    if st.sidebar.button("🗑️ Cancella Report"):
+        del st.session_state.sidebar_report
+        st.rerun()
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔔 Automazione Notifiche")
 url_id = st.query_params.get("id", "")
