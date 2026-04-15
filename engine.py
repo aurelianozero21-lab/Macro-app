@@ -95,7 +95,7 @@ def load_all_data(api_key, lookback):
     
     try:
         lista_tickers = list(tickers_map.values())
-        data = yf.download(lista_tickers, period="20y", progress=False) # Aumentato a 20 anni per la stagionalità
+        data = yf.download(lista_tickers, period="20y", progress=False, threads=False, group_by='ticker')
         
         if 'Close' in data:
             for nome, ticker in tickers_map.items():
