@@ -1,5 +1,6 @@
 streamlit
-yfinance
+yfinance==0.2.38
+websockets>=12.0
 pandas
 plotly
 fredapi
@@ -14,4 +15,3 @@ supabase==2.3.4
 flask==3.0.0
 websockets>=12.0
 numpy
-requests
