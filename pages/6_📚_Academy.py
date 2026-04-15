@@ -8,12 +8,13 @@ st.write("Dimentica le formule matematiche complesse e i paroloni di Wall Street
 
 st.markdown("---")
 
-# Divisione in 4 sottomoduli semplici
-tab_macro, tab_azioni, tab_crypto, tab_app = st.tabs([
+# Divisione in 5 sottomoduli semplici
+tab_macro, tab_azioni, tab_crypto, tab_geo, tab_app = st.tabs([
     "🌍 1. Le Basi dell'Economia", 
     "📈 2. Capire le Azioni", 
     "⚡ 3. Il Mondo Crypto",
-    "🛠️ 4. Guida all'Applicazione"
+    "🛢️ 4. Geopolitica & Materie",
+    "🛠️ 5. Guida all'Applicazione"
 ])
 
 # ==========================================
@@ -79,7 +80,34 @@ with tab_crypto:
     st.info("💡 **Cosa significa per i prezzi?** Storicamente, tagliando la nuova offerta a metà, se la domanda delle persone rimane uguale o sale, il prezzo è costretto a salire. Questo crea i famosi 'Cicli' di 4 anni del mercato crypto.")
 
 # ==========================================
-# MODULO 4: GUIDA ALL'APP
+# MODULO 4: GEOPOLITICA E MATERIE PRIME
+# ==========================================
+with tab_geo:
+    st.header("🛢️ Il Mondo Fisico: Geopolitica e Materie Prime")
+    st.write("I mercati finanziari vivono su internet, ma dipendono dal mondo reale. Navi cargo, tubi di gas e miniere muovono l'economia globale.")
+
+    st.subheader("⚔️ La Geopolitica (Il traffico globale)")
+    st.write("Immagina il commercio mondiale come una gigantesca rete autostradale di consegne Amazon. Le guerre, i dazi e le tensioni internazionali sono degli 'incidenti' su queste autostrade. Se una rotta viene bloccata (es. il Mar Rosso), le merci ci mettono più tempo ad arrivare e costano di più. Questo genera **Inflazione**.")
+
+    st.markdown("---")
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.subheader("🥇 L'Oro (L'Assicurazione)")
+        st.write("Non compri l'assicurazione sulla casa sperando che vada a fuoco, la compri 'nel caso in cui' succeda. L'oro funziona così. Non paga dividendi e non produce nulla, ma quando i governi stampano troppi soldi o scoppia una guerra mondiale, la gente va nel panico e compra oro. **Avere un po' d'oro in portafoglio è come avere un estintore in cucina.**")
+    
+    with col_g2:
+        st.subheader("🛢️ Il Petrolio (Il Sangue dell'Economia)")
+        st.write("Ogni cosa che indossi, mangi o usi è stata trasportata da un camion o una nave che va a petrolio. Se scoppia una guerra in Medio Oriente e il prezzo del petrolio schizza alle stelle, produrre qualsiasi cosa costerà di più. **Se il petrolio sale troppo in fretta, spesso causa una recessione economica.**")
+
+    st.markdown("---")
+
+    st.subheader("💵 Il Re Dollaro (Indice DXY)")
+    st.write("Il DXY misura la forza del Dollaro Americano contro le altre monete. Perché lo guardiamo sempre?")
+    st.error("🚨 **La palla da demolizione:** Il Dollaro è il bene rifugio supremo. Quando c'è vera paura nel mondo, tutti vendono le proprie monete locali (Euro, Yen, ecc.) o le proprie azioni per comprare Dollari. **Regola d'oro: Quando il Dollaro sale forte e veloce, tutto il resto (Azioni, Crypto, Oro) di solito crolla.**")
+
+# ==========================================
+# MODULO 5: GUIDA ALL'APP
 # ==========================================
 with tab_app:
     st.header("🛠️ Come leggere i nostri indicatori")
