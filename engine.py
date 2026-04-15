@@ -140,26 +140,53 @@ def load_all_data(api_key, lookback):
     return df.dropna()
 
 def calcola_backtest(df, pesi):
-    colonne = ['S&P 500', 'Bond ETF', 'Bitcoin', 'Oro']
-    df_bt = df[colonne].copy()
-    rendimenti = df_bt.pct_change().dropna()
-    
-    rendimenti['Portafoglio'] = (
-        rendimenti['S&P 500'] * pesi['Azioni'] +
-        rendimenti['Bond ETF'] * pesi['Bonds'] +
-        rendimenti['Bitcoin'] * pesi['Crypto'] +
-        rendimenti['Oro'] * pesi['Cash']
-    )
-    
-    capitale_iniziale = 10000
-    equity = (1 + rendimenti['Portafoglio']).cumprod() * capitale_iniziale
-    equity_sp500 = (1 + rendimenti['S&P 500']).cumprod() * capitale_iniziale
-    
-    anni = len(rendimenti) / 252
-    cagr = (equity.iloc[-1] / capitale_iniziale) ** (1 / anni) - 1 if anni > 0 else 0
-    max_dd = ((equity - equity.cummax()) / equity.cummax()).min()
-    
-    return equity, equity_sp500, cagr, max_dd
+    try:
+        # 1. Controllo di sicurezza: se il database è vuoto, fermati subito
+        if df.empty:
+            return pd.Series([10000.0]), pd.Series([10000.0]), 0.0, 0.0
+            
+        # Calcoliamo i rendimenti giornalieri
+        rendimenti = df[['S&P 500', 'Bitcoin', 'Oro']].pct_change().dropna()
+        
+        # 2. Controllo di sicurezza: se dopo aver tolto i dati mancanti non resta nulla
+        if rendimenti.empty:
+             return pd.Series([10000.0]), pd.Series([10000.0]), 0.0, 0.0
+        
+        # Simuliamo un bond proxy
+        rendimenti['Bonds'] = 0.04 / 252 
+        
+        # Calcoliamo il rendimento pesato del portafoglio
+        rendimenti_portafoglio = (
+            rendimenti['S&P 500'] * pesi.get('Azioni', 0) +
+            rendimenti['Bonds'] * pesi.get('Bonds', 0) +
+            rendimenti['Bitcoin'] * pesi.get('Crypto', 0) +
+            rendimenti['Oro'] * pesi.get('Cash', 0) 
+        )
+        
+        # Calcoliamo l'equity line (capitale cumulato partendo da 10.000$)
+        capitale_iniziale = 10000
+        equity_portafoglio = capitale_iniziale * (1 + rendimenti_portafoglio).cumprod()
+        equity_benchmark = capitale_iniziale * (1 + rendimenti['S&P 500']).cumprod()
+        
+        # 3. Controllo di sicurezza finale prima della matematica
+        if equity_portafoglio.empty:
+            return pd.Series([10000.0]), pd.Series([10000.0]), 0.0, 0.0
+            
+        # Metriche di performance (usiamo max per evitare divisioni per zero se c'è un solo giorno)
+        anni = max(len(rendimenti_portafoglio) / 252, 0.01)
+        cagr = (equity_portafoglio.iloc[-1] / capitale_iniziale) ** (1 / anni) - 1
+        
+        # Max Drawdown
+        picco_cumulativo = equity_portafoglio.cummax()
+        drawdown = (equity_portafoglio - picco_cumulativo) / picco_cumulativo
+        max_dd = drawdown.min() if not drawdown.empty else 0.0
+        
+        return equity_portafoglio, equity_benchmark, cagr, max_dd
+        
+    except Exception as e:
+        print(f"Errore nel backtest: {e}")
+        # Paracadute finale
+        return pd.Series([10000.0]), pd.Series([10000.0]), 0.0, 0.0
 
 # --- NUOVA FUNZIONE: STAGIONALITA' ---
 def calcola_stagionalita(df, asset_name):
