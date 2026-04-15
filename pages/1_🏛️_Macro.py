@@ -4,22 +4,49 @@ import plotly.express as px
 import plotly.graph_objects as go
 from engine import *
 
+# Configurazione Pagina
 st.set_page_config(page_title="Macroeconomia", page_icon="🏛️", layout="wide")
-st.title("🏛️ Macroeconomia & Liquidità")
+st.title("🏛️ Macro & Liquidity")
 
-# Caricamento rapido grazie alla cache di engine.py
-try:
-    df = load_all_data(st.secrets["FRED_API_KEY"], 90)
-    current = df.iloc[-1]
-    df_etfs = get_etf_screener()
-    df_sp500_corrente, df_sp500_storico = calcola_stagionalita(df, 'S&P 500')
-except Exception as e:
-    st.error(f"Errore caricamento dati: {e}")
-    st.stop()
+# --- CARICAMENTO DATI (Necessario per far funzionare i grafici sotto) ---
+lookback = 90 # Valore di default
+with st.spinner("Caricamento dati macro..."):
+    try:
+        df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
+        live_prices = get_live_prices()
+        df_etfs = get_etf_screener()
+        tension_index, _, _ = analyze_geopolitics()
+        current = df.iloc[-1]
+        
+        # Calcolo variabili necessarie
+        fase_attuale = calcola_fase_avanzata(current.get('YieldCurve', 0), current.get('Z_S&P 500', 0), tension_index)
+        liq_delta = current.get('Liquidity_Delta_30d', 0)
+        df_sp500_corrente, df_sp500_storico = calcola_stagionalita(df, 'S&P 500')
+    except Exception as e:
+        st.error(f"Errore tecnico: {e}")
+        st.stop()
+
+# --- IL TUO CODICE ORIGINALE (TAB 1) ---
+
+st.header("🚦 Semaforo Macro Intelligente")
+if "1." in fase_attuale: st.error(f"🚨 **FASE DI MERCATO: {fase_attuale}**")
+elif "2." in fase_attuale: st.warning(f"⚖️ **FASE DI MERCATO: {fase_attuale}**")
+else: st.success(f"🚀 **FASE DI MERCATO: {fase_attuale}**")
+
+col_live1, col_live2, col_live3, col_live4 = st.columns(4)
+sp500_live = live_prices.get('^GSPC', current.get('S&P 500', 0))
+vix_live = live_prices.get('^VIX', current.get('VIX', 0))
+liq_delta = current.get('Liquidity_Delta_30d', 0)
+cape_val = current.get('CAPE', 0)
+
+col_live1.metric("S&P 500 (Live)", f"{sp500_live:,.2f}", delta=f"Z-Score: {current.get('Z_S&P 500', 0):.2f}")
+col_live2.metric("Liquidità FED Netta", f"${current.get('Fed_Liquidity_T', 0):.2f}T", delta=f"{'+' if liq_delta > 0 else ''}{liq_delta:.2f}T (30g)", delta_color="normal")
+col_live3.metric("Shiller P/E (CAPE)", f"{cape_val:.2f}", delta="> 30 Rischio Bolla", delta_color="inverse" if cape_val > 30 else "normal")
+col_live4.metric("VIX Index (Paura)", f"{vix_live:.2f}", delta="Volatilità", delta_color="off")
 
 st.markdown("---")
 st.header("📅 Cicli e Stagionalità (S&P 500)")
-st.write("Confronto tra l'anno in corso e la media storica degli ultimi 20 anni.")
+st.write("Confronto tra l'anno in corso e la media storica degli ultimi 20 anni. Permette di capire se il mercato è in anticipo o in ritardo rispetto ai suoi normali flussi di capitale stagionali.")
 
 if not df_sp500_corrente.empty and not df_sp500_storico.empty:
     fig_season = go.Figure()
@@ -31,6 +58,8 @@ if not df_sp500_corrente.empty and not df_sp500_storico.empty:
 
 st.markdown("---")
 st.header("🌊 Fed Liquidity Tracker")
+st.write("Analisi di correlazione tra stampa di moneta (FED) e S&P 500.")
+
 if 'Fed_Liquidity_T' in df.columns and 'S&P 500' in df.columns:
     fig_liq = go.Figure()
     fig_liq.add_trace(go.Scatter(x=df.index, y=df['S&P 500'], name='S&P 500', yaxis='y1', line=dict(color='#00b894', width=2)))
@@ -52,7 +81,6 @@ with col_sm1:
     else: st.info("⚖️ **CONVERGENZA:** Mercato azionario e credito sono allineati.")
 with col_sm2:
     st.subheader("🖨️ Direzione Liquidità")
-    liq_delta = current.get('Liquidity_Delta_30d', 0)
     if liq_delta > 0: st.success("🟢 **ESPANSIONE (Risk-On):** Il sistema è supportato dalla liquidità.")
     else: st.error("🔴 **CONTRAZIONE (Risk-Off):** La FED drena dollari. Rischio di correzione.")
 
