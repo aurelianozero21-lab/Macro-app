@@ -211,3 +211,51 @@ if not df_etfs.empty:
     with col_g1: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Geografia'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Aree Geografiche").update_layout(coloraxis_showscale=False, height=350), use_container_width=True)
     with col_g2: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Settore'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Settori S&P 500").update_layout(coloraxis_showscale=False, height=350), use_container_width=True)
     st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
+st.markdown("---")
+st.header("📉 Curva dei Rendimenti (Spread T10Y2Y)")
+st.write("La differenza tra i tassi a 10 anni e 2 anni. Se scende sotto lo zero (Inversione), il mercato sta segnalando una recessione imminente.")
+
+if 'YieldCurve' in df.columns:
+    fig_yield = go.Figure()
+    # Linea dello Spread
+    fig_yield.add_trace(go.Scatter(
+        x=df.index, y=df['YieldCurve'], 
+        name='Spread 10Y-2Y',
+        line=dict(color='#0984e3', width=2),
+        fill='tozeroy', fillcolor='rgba(9, 132, 227, 0.1)'
+    ))
+    # Linea dello Zero (Riferimento)
+    fig_yield.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Area di Recessione")
+    
+    fig_yield.update_layout(
+        height=350, 
+        yaxis_title="Percentuale (%)",
+        margin=dict(l=0, r=0, t=10, b=0),
+        legend=dict(x=0.01, y=0.99)
+    )
+    st.plotly_chart(fig_yield, use_container_width=True)
+
+    st.markdown("---")
+st.header("😰 Termometro del Panico (VIX vs VIX3M)")
+vix_val = live_prices.get('^VIX', current.get('VIX', 0))
+vix3m_val = live_prices.get('^VIX3M', 20.0) # Valore di default se manca
+
+col_vix1, col_vix2 = st.columns([1, 2])
+
+with col_vix1:
+    ratio = vix_val / vix3m_val
+    if ratio > 1:
+        st.error(f"### BACKWARDATION\nRatio: {ratio:.2f}")
+        st.write("⚠️ **PANICO:** La volatilità a breve è esplosa. Storicamente indica un bottom di mercato.")
+    else:
+        st.success(f"### CONTANGO\nRatio: {ratio:.2f}")
+        st.write("✅ **CALMA:** La struttura è normale. Gli investitori sono tranquilli sul breve periodo.")
+
+with col_vix2:
+    fig_vix = go.Figure(go.Bar(
+        x=['VIX (1M)', 'VIX3M (3M)'],
+        y=[vix_val, vix3m_val],
+        marker_color=['#d63031' if ratio > 1 else '#00b894', '#b2bec3']
+    ))
+    fig_vix.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), yaxis_title="Indice Volatilità")
+    st.plotly_chart(fig_vix, use_container_width=True)
