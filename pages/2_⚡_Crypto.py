@@ -23,7 +23,7 @@ with st.spinner("Sincronizzazione dati Blockchain..."):
         
         # Recupero metriche avanzate (con fallback di sicurezza)
         mvrv_val = current.get('MVRV_Z', 1.2) # Default simulato se API non disponibile
-        btc_dom = live_prices.get('BTC.D', 52.5) # Default simulato
+        btc_dom = get_real_btc_dominance()
     except Exception as e:
         st.error(f"Errore tecnico nel caricamento dati: {e}")
         st.stop()
