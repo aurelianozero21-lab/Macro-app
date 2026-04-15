@@ -1,17 +1,8 @@
 streamlit
-yfinance>=0.2.31
-websockets>=12.0
-lxml
-html5lib
 pandas
+numpy
 plotly
-fredapi
-feedparser
-xlsxwriter
-google-generativeai
 requests
-supabase
-pyTelegramBotAPI==4.14.0
-supabase==2.3.4
-flask==3.0.0
+google-generativeai
+yfinance==0.2.31
 
