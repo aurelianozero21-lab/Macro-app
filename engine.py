@@ -148,7 +148,7 @@ def calcola_backtest(df, pesi):
         rendimenti['S&P 500'] * pesi['Azioni'] +
         rendimenti['Bond ETF'] * pesi['Bonds'] +
         rendimenti['Bitcoin'] * pesi['Crypto'] +
-        rendimenti['Oro'] * pesi['Difesa']
+        rendimenti['Oro'] * pesi['Cash']
     )
     
     capitale_iniziale = 10000
