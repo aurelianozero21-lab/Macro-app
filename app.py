@@ -136,6 +136,34 @@ col_live2.metric("Liquidità FED Netta", f"${current.get('Fed_Liquidity_T', 0):.
 col_live3.metric("Shiller P/E (CAPE)", f"{cape_val:.2f}", delta="> 30 Rischio Bolla", delta_color="inverse" if cape_val > 30 else "normal")
 col_live4.metric("VIX Index (Paura)", f"{vix_live:.2f}", delta="Volatilità", delta_color="off")
 
+# --- OROLOGIO DEL CICLO ECONOMICO ---
+st.markdown("---")
+st.header("⏱️ Orologio del Ciclo Economico")
+fase_orologio, desc_orologio, asset_orologio, colore_orologio = calcola_orologio_ciclo(df)
+
+col_clk1, col_clk2 = st.columns([1, 2])
+
+with col_clk1:
+    # Mostriamo la fase attuale con un box colorato
+    if colore_orologio == "success":
+        st.success(f"**Lancetta Attuale:**\n### {fase_orologio}")
+    elif colore_orologio == "warning":
+        st.warning(f"**Lancetta Attuale:**\n### {fase_orologio}")
+    elif colore_orologio == "error":
+        st.error(f"**Lancetta Attuale:**\n### {fase_orologio}")
+    else:
+        st.info(f"**Lancetta Attuale:**\n### {fase_orologio}")
+
+with col_clk2:
+    st.markdown(f"**Scenario:** {desc_orologio}")
+    st.markdown(f"**Allocazione Istituzionale Consigliata:** {asset_orologio}")
+    st.progress(
+        0.25 if "Reflazione" in fase_orologio else 
+        0.50 if "Ripresa" in fase_orologio else 
+        0.75 if "Surriscaldamento" in fase_orologio else 1.0
+    )
+    st.caption("Fasi: 25% Reflazione ➔ 50% Ripresa ➔ 75% Surriscaldamento ➔ 100% Stagflazione")
+
 st.markdown("---")
 st.header("📅 Cicli e Stagionalità (S&P 500)")
 st.write("Confronto tra l'anno in corso e la media storica degli ultimi 20 anni. Permette di capire se il mercato è in anticipo o in ritardo rispetto ai suoi normali flussi di capitale stagionali.")
