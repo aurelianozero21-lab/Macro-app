@@ -21,16 +21,24 @@ def init_supabase():
 
 @st.cache_data(ttl=120)
 def get_live_prices():
-    tickers = ['^GSPC', 'BTC-USD', 'GC=F', '^VIX', 'CL=F']
-    prices = {'^GSPC': 0, 'BTC-USD': 0, 'GC=F': 0, '^VIX': 0, 'CL=F': 0}
-    try:
-        data = yf.download(tickers, period="1d", interval="2m", progress=False)
-        if not data.empty and 'Close' in data:
-            for t in tickers:
-                prices[t] = data['Close'][t].dropna().iloc[-1].item()
-    except:
-        pass
-    return prices
+    """Recupera i prezzi in tempo reale con scudo contro i blocchi di Yahoo Finance."""
+    tickers_list = ['BTC-USD', '^VIX', 'GC=F', '^GSPC', 'CL=F']
+    live_prices = {}
+    
+    for ticker in tickers_list:
+        try:
+            # yf.Ticker può fallire se l'IP è bloccato
+            data = yf.Ticker(ticker).history(period="1d")
+            if not data.empty:
+                live_prices[ticker] = data['Close'].iloc[-1]
+            else:
+                live_prices[ticker] = 0.0 # Valore di emergenza se vuoto
+        except Exception as e:
+            # Se Yahoo ci blocca (JSONDecodeError), ignoriamo l'errore e mettiamo un valore neutro
+            print(f"Yahoo Finance ha bloccato {ticker}, uso valore di emergenza.")
+            live_prices[ticker] = 0.0
+            
+    return live_prices
 
 @st.cache_data(ttl=86400)
 def get_shiller_pe():
