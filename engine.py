@@ -388,7 +388,6 @@ def calcola_orologio_ciclo(df):
         return fase, descrizione, asset_consigliato, colore
     except Exception as e:
         return "Sconosciuta", "Dati insufficienti", "N/A", "normal"
-import requests
 
 def get_real_btc_dominance():
     """
