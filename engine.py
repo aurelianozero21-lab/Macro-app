@@ -306,3 +306,50 @@ def calcola_fase_avanzata(yc, z_sp500, tension):
 
 def get_telegram_link():
     return st.secrets.get("TG_BOT_URL", "https://t.me/tuobot")
+
+def calcola_orologio_ciclo(df):
+    """
+    Calcola la fase attuale dell'Orologio del Ciclo Economico di Merrill Lynch.
+    Usa lo Z-Score dell'S&P 500 come proxy di crescita e l'Oro come proxy di inflazione.
+    """
+    try:
+        current = df.iloc[-1]
+        crescita = current.get('Z_S&P 500', 0)
+        inflazione = current.get('Z_Oro', 0)
+        
+        fase = ""
+        descrizione = ""
+        asset_consigliato = ""
+        colore = ""
+
+        # Quadrante 2: Ripresa (Crescita +, Inflazione -)
+        if crescita > 0 and inflazione < 0:
+            fase = "Ripresa (Fase 2)"
+            descrizione = "La crescita accelera, ma i prezzi sono sotto controllo."
+            asset_consigliato = "📈 Azioni (Tech, Industriali)"
+            colore = "success"
+            
+        # Quadrante 3: Surriscaldamento (Crescita +, Inflazione +)
+        elif crescita > 0 and inflazione >= 0:
+            fase = "Surriscaldamento (Fase 3)"
+            descrizione = "L'economia è rovente. L'inflazione inizia a salire."
+            asset_consigliato = "🛢️ Materie Prime (Energia, Oro)"
+            colore = "warning"
+            
+        # Quadrante 4: Stagflazione (Crescita -, Inflazione +)
+        elif crescita <= 0 and inflazione >= 0:
+            fase = "Stagflazione (Fase 4)"
+            descrizione = "La crescita frena bruscamente, ma i prezzi restano alti."
+            asset_consigliato = "💵 Liquidità (Cash) e Difensivi"
+            colore = "error"
+            
+        # Quadrante 1: Reflazione (Crescita -, Inflazione -)
+        else:
+            fase = "Reflazione (Fase 1)"
+            descrizione = "L'economia è debole, le banche tagliano i tassi."
+            asset_consigliato = "🏦 Obbligazioni (Bonds Governativi)"
+            colore = "normal"
+
+        return fase, descrizione, asset_consigliato, colore
+    except Exception as e:
+        return "Sconosciuta", "Dati insufficienti", "N/A", "normal"
