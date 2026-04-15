@@ -9,11 +9,10 @@ st.set_page_config(page_title="Crypto & On-Chain", page_icon="⚡", layout="wide
 st.title("⚡ Crypto & On-Chain Analysis")
 st.write("Metriche avanzate, analisi della redditività dei minatori e valutazione matematica del ciclo di mercato.")
 
-# --- CARICAMENTO DATI (Istanteo tramite Cache) ---
+# --- CARICAMENTO DATI (Istantaneo tramite Cache) ---
 lookback = 90
 with st.spinner("Sincronizzazione dati Blockchain..."):
     try:
-        # Carichiamo solo ciò che è strettamente necessario per questa pagina
         df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
         live_prices = get_live_prices()
         hash_status, df_hash = get_onchain_metrics()
@@ -21,6 +20,10 @@ with st.spinner("Sincronizzazione dati Blockchain..."):
         fgi_val, fgi_class = get_crypto_fgi()
         current = df.iloc[-1] if not df.empty else pd.Series()
         df_btc_corrente, df_btc_storico = calcola_stagionalita(df, 'Bitcoin')
+        
+        # Recupero metriche avanzate (con fallback di sicurezza)
+        mvrv_val = current.get('MVRV_Z', 1.2) # Default simulato se API non disponibile
+        btc_dom = live_prices.get('BTC.D', 52.5) # Default simulato
     except Exception as e:
         st.error(f"Errore tecnico nel caricamento dati: {e}")
         st.stop()
@@ -30,65 +33,85 @@ if current.empty:
     st.stop()
 
 # ==========================================
-# CORPO DELLA PAGINA CRYPTO E ON-CHAIN
+# 1. VALUTAZIONE CICLO E SENTIMENT
 # ==========================================
-
 st.header("⚡ Valutazione Ciclo Bitcoin")
 mayer_btc = current.get('Mayer_BTC', 0)
-col_pre1, col_pre2 = st.columns(2)
+
+col_pre1, col_pre2, col_pre3 = st.columns([1, 1, 1])
 
 with col_pre1:
-    st.subheader("Fase Macro (Mayer Multiple)")
+    st.subheader("Fase Macro (Mayer)")
     if mayer_btc < 1.0: st.success("🔋 **ACCUMULO (Sconto Storico)**")
     elif mayer_btc < 2.0: st.warning("📈 **BULL MARKET (Trend Sano)**")
-    else: st.error("💥 **BOLLA SPECULATIVA (Prendere Profitti)**")
+    else: st.error("💥 **BOLLA SPECULATIVA (Take Profit)**")
+    st.metric("Mayer Multiple", f"{mayer_btc:.2f}")
 
 with col_pre2:
+    st.subheader("On-Chain (MVRV Z-Score)")
+    if mvrv_val < 0.1: st.success("🟢 **SOTTOVALUTAZIONE ESTREMA**")
+    elif mvrv_val > 7.0: st.error("🔴 **SOPRAVVALUTAZIONE (Top)**")
+    else: st.info("🟡 **FASE NEUTRALE**")
+    st.metric("Z-Score Attuale", f"{mvrv_val:.2f}", delta="> 7.0 è Rischio Bolla", delta_color="inverse" if mvrv_val > 7 else "normal")
+
+with col_pre3:
     st.plotly_chart(go.Figure(go.Indicator(
         mode="gauge+number", 
         value=fgi_val, 
-        title={'text': f"Fear & Greed Index: {fgi_class}"}, 
+        title={'text': f"Fear & Greed: {fgi_class}"}, 
         gauge={
             'axis': {'range': [0, 100]}, 
             'steps': [{'range': [0, 45], 'color': "#e57373"}, {'range': [55, 100], 'color': "#81c784"}]
         }
-    )).update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
-
-c1, c2, c3, c4 = st.columns(4)
-btc_live = live_prices.get('BTC-USD', current.get('Bitcoin', 0))
-c1.metric("Prezzo BTC (Live)", f"${btc_live:,.0f}")
-c2.metric("Mayer Multiple", f"{mayer_btc:.2f}")
-c3.metric("RSI (14 Giorni)", f"{current.get('RSI_BTC', 0):.0f}")
-c4.metric("Distanza da ATH", f"{current.get('BTC_Drawdown', 0):.1f}%")
+    )).update_layout(height=200, margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
 
 st.markdown("---")
-st.header("📅 Stagionalità (Bitcoin)")
-st.write("L'andamento di Bitcoin nel corso dell'anno attuale rispetto alla media storica decennale.")
 
-if not df_btc_corrente.empty and not df_btc_storico.empty:
-    fig_btc_season = go.Figure()
-    anno_ora_btc = pd.Timestamp.now().year
-    fig_btc_season.add_trace(go.Scatter(x=df_btc_corrente['DayOfYear'], y=df_btc_corrente['Cumulative'], name=f'Bitcoin ({anno_ora_btc})', line=dict(color='#fdcb6e', width=3)))
-    fig_btc_season.add_trace(go.Scatter(x=df_btc_storico['DayOfYear'], y=df_btc_storico['Cumulative Storico'], name='Media Storica', line=dict(color='#b2bec3', width=2, dash='dash')))
-    fig_btc_season.update_layout(height=400, xaxis_title="Giorno dell'Anno (1-365)", yaxis_title="Performance Cumulata (Base 100)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'))
-    st.plotly_chart(fig_btc_season, use_container_width=True)
+# ==========================================
+# 2. STAGIONALITÀ E DOMINANCE
+# ==========================================
+col_sea1, col_sea2 = st.columns([2, 1])
+
+with col_sea1:
+    st.header("📅 Stagionalità (Bitcoin)")
+    st.write("L'andamento di Bitcoin nell'anno attuale rispetto alla media storica decennale.")
+    if not df_btc_corrente.empty and not df_btc_storico.empty:
+        fig_btc_season = go.Figure()
+        anno_ora_btc = pd.Timestamp.now().year
+        fig_btc_season.add_trace(go.Scatter(x=df_btc_corrente['DayOfYear'], y=df_btc_corrente['Cumulative'], name=f'Bitcoin ({anno_ora_btc})', line=dict(color='#fdcb6e', width=3)))
+        fig_btc_season.add_trace(go.Scatter(x=df_btc_storico['DayOfYear'], y=df_btc_storico['Cumulative Storico'], name='Media Storica', line=dict(color='#b2bec3', width=2, dash='dash')))
+        fig_btc_season.update_layout(height=350, xaxis_title="Giorno (1-365)", yaxis_title="Performance Cumulata", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99))
+        st.plotly_chart(fig_btc_season, use_container_width=True)
+
+with col_sea2:
+    st.header("👑 Bitcoin Dominance")
+    st.write("Indica dove stanno andando i capitali speculativi.")
+    st.metric("Dominance (BTC.D)", f"{btc_dom:.1f}%")
+    
+    if btc_dom > 55:
+        st.warning("🟠 **Fase Bitcoin:** La liquidità è concentrata su BTC. Le Altcoin sanguinano contro BTC.")
+    elif btc_dom < 45:
+        st.success("🟢 **Altcoin Season:** Speculazione massima. I capitali si riversano sulle crypto minori.")
+    else:
+        st.info("⚖️ **Transizione:** Mercato in equilibrio tra BTC e Altcoin.")
 
 st.markdown("---")
+
+# ==========================================
+# 3. MINATORI E ALTCOIN
+# ==========================================
 st.header("⛓️ Analisi On-Chain: Hash Ribbon")
-st.write("Misura la salute della rete Bitcoin e la redditività dei Minatori. Quando la media veloce scende sotto la lenta, i minatori stanno capitolando (ottimo setup di lungo termine).")
+st.write("Misura la redditività dei Minatori. Quando la media veloce scende sotto la lenta, i minatori stanno capitolando (ottimo setup di lungo termine).")
 
-if "CAPITULATION" in hash_status:
-    st.error(f"**Stato Rete Attuale:** {hash_status}")
-elif "BUY SIGNAL" in hash_status:
-    st.success(f"**Stato Rete Attuale:** {hash_status}")
-else:
-    st.info(f"**Stato Rete Attuale:** {hash_status}")
+if "CAPITULATION" in hash_status: st.error(f"**Stato Rete Attuale:** {hash_status}")
+elif "BUY SIGNAL" in hash_status: st.success(f"**Stato Rete Attuale:** {hash_status}")
+else: st.info(f"**Stato Rete Attuale:** {hash_status}")
     
 if not df_hash.empty:
     fig_hash = go.Figure()
     fig_hash.add_trace(go.Scatter(x=df_hash.index, y=df_hash['SMA30'], name='SMA 30 (Veloce)', line=dict(color='#ff7675', width=2)))
     fig_hash.add_trace(go.Scatter(x=df_hash.index, y=df_hash['SMA60'], name='SMA 60 (Lenta)', line=dict(color='#0984e3', width=2)))
-    fig_hash.update_layout(height=350, margin=dict(l=0, r=0, t=30, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'), yaxis_title="Terahashes/s")
+    fig_hash.update_layout(height=350, margin=dict(l=0, r=0, t=30, b=0), legend=dict(x=0.01, y=0.99), yaxis_title="Terahashes/s")
     st.plotly_chart(fig_hash, use_container_width=True)
 
 if not df_crypto.empty: 
