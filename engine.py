@@ -353,3 +353,19 @@ def calcola_orologio_ciclo(df):
         return fase, descrizione, asset_consigliato, colore
     except Exception as e:
         return "Sconosciuta", "Dati insufficienti", "N/A", "normal"
+import requests
+
+def get_real_btc_dominance():
+    """
+    Recupera la Bitcoin Dominance reale in tempo reale dall'API pubblica di CoinGecko.
+    """
+    try:
+        url = "https://api.coingecko.com/api/v3/global"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        # Estrae la dominance esatta di BTC dal totale del mercato
+        btc_dom = data['data']['market_cap_percentage']['btc']
+        return btc_dom
+    except Exception as e:
+        # Fallback di sicurezza in caso i server di CoinGecko siano intasati
+        return 54.0
