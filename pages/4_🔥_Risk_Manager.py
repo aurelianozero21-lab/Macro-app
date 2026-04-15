@@ -78,18 +78,22 @@ else:
     # ==========================================
     st.header("📈 Analisi Storica (Backtest)")
     
-    eq_port, eq_bench, cagr, max_dd = calcola_backtest(df, pesi)
+  eq_port, eq_bench, cagr, max_dd = calcola_backtest(df, pesi)
     
-    col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("Valore Finale (su $10k)", f"${eq_port.iloc[-1]:,.2f}")
-    col_m2.metric("CAGR (Rendimento Annuo)", f"{cagr*100:.1f}%")
-    col_m3.metric("Max Drawdown (Rischio)", f"{max_dd*100:.1f}%", delta="Perdita Max", delta_color="inverse")
-    
-    fig_backtest = go.Figure()
-    fig_backtest.add_trace(go.Scatter(x=eq_port.index, y=eq_port, name='Tuo Portafoglio', line=dict(color='#00b894', width=3)))
-    fig_backtest.add_trace(go.Scatter(x=eq_bench.index, y=eq_bench, name='S&P 500 (Benchmark)', line=dict(color='#b2bec3', dash='dash')))
-    fig_backtest.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99))
-    st.plotly_chart(fig_backtest, use_container_width=True)
+    # SALVAVITA: Se i dati sono vuoti a causa di un errore API, ferma il crash
+    if eq_port.empty or len(eq_port) == 0:
+        st.warning("⚠️ Dati di mercato attualmente non disponibili per il calcolo. Verifica le chiavi API o la connessione.")
+    else:
+        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1.metric("Valore Finale (su $10k)", f"${eq_port.iloc[-1]:,.2f}")
+        col_m2.metric("CAGR (Rendimento Annuo)", f"{cagr*100:.1f}%")
+        col_m3.metric("Max Drawdown (Rischio)", f"{max_dd*100:.1f}%", delta="Perdita Max", delta_color="inverse")
+        
+        fig_backtest = go.Figure()
+        fig_backtest.add_trace(go.Scatter(x=eq_port.index, y=eq_port, name='Tuo Portafoglio', line=dict(color='#00b894', width=3)))
+        fig_backtest.add_trace(go.Scatter(x=eq_bench.index, y=eq_bench, name='S&P 500 (Benchmark)', line=dict(color='#b2bec3', dash='dash')))
+        fig_backtest.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99))
+        st.plotly_chart(fig_backtest, use_container_width=True)
 
     st.markdown("---")
 
