@@ -61,8 +61,13 @@ if "GEMINI_API_KEY" in st.secrets:
                 # Aggiunge e mostra la risposta
                 st.chat_message("assistant").markdown(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
+            
+            # --- SISTEMA DI SICUREZZA PER LE API DI GOOGLE ---
             except Exception as e:
-                st.error(f"Errore di comunicazione con l'AI: {e}")
+                if "ResourceExhausted" in str(e) or "429" in str(e):
+                    st.error("⚠️ **Traffico elevato!** Google ha temporaneamente limitato le richieste gratuite. Il server si sta raffreddando, attendi 60 secondi e fai di nuovo la tua domanda.")
+                else:
+                    st.error(f"Errore di comunicazione con l'AI: {e}")
 
 else: 
     st.error("Manca la chiave `GEMINI_API_KEY` nei Secrets di Streamlit.")
