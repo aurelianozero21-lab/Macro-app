@@ -227,6 +227,9 @@ def load_all_data(api_key, lookback):
             df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
+
+df = df.ffill().dropna()
+
 def calcola_backtest(df, pesi):
     try:
         # 1. Controllo di sicurezza: se il database è vuoto, fermati subito
