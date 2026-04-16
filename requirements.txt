@@ -7,7 +7,7 @@ feedparser
 xlsxwriter
 requests
 google-generativeai
-yfinance==0.2.31
+yfinance
 supabase==2.3.4
 pyTelegramBotAPI==4.14.0
 flask==3.0.0
