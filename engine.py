@@ -199,7 +199,7 @@ def load_all_data(api_key, lookback):
         for col in ['BTC_ATH', 'BTC_Drawdown', 'Mayer_BTC', 'RSI_BTC']:
             df[col] = 0.0
 
-# Dati Macro (FRED)
+    # Dati Macro (FRED)
     try:
         fred = Fred(api_key=api_key)
         df['YieldCurve'] = fred.get_series('T10Y2Y')
@@ -219,6 +219,12 @@ def load_all_data(api_key, lookback):
         print(f"Errore FRED: {e}")
         df['YieldCurve'] = 0.0
         df['Fed_Liquidity_T'] = 0.0
+        
+    # --- IL TOCCO MAGICO PER IL CAPE ---
+    df['CAPE'] = get_shiller_pe()
+
+    # Pulizia righe vuote prima dei calcoli statistici
+    df = df.ffill().dropna()
     
     # Calcolo Z-Score
     cols_to_z = ['S&P 500', 'Bitcoin', 'Oro', 'VIX']
@@ -227,9 +233,7 @@ def load_all_data(api_key, lookback):
             df[f'Z_{col}'] = (df[col] - df[col].rolling(window=lookback).mean()) / df[col].rolling(window=lookback).std()
             
     return df.dropna()
-
-df = df.ffill().dropna()
-
+    
 def calcola_backtest(df, pesi):
     try:
         # 1. Controllo di sicurezza: se il database è vuoto, fermati subito
