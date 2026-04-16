@@ -100,32 +100,23 @@ def check_smart_alerts(df, live_prices, tension_index, hash_status=""):
 
 @st.cache_data(ttl=86400)
 def get_shiller_pe():
+    import re
     try:
-        url = 'https://www.multpl.com/shiller-pe/table/by-month'
-        # Identità finta molto più credibile per i server di sicurezza
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        # Puntiamo alla pagina principale, molto più leggera
+        url = 'https://www.multpl.com/shiller-pe'
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
         r = requests.get(url, headers=headers, timeout=5)
         
-        tables = pd.read_html(r.text)
-        df_cape = tables[0]
-        df_cape.columns = ['Date', 'CAPE']
-        df_cape['Date'] = pd.to_datetime(df_cape['Date'])
-        
-        # Pulisce i dati rimuovendo lettere e parole come "estimate"
-        df_cape['CAPE'] = pd.to_numeric(df_cape['CAPE'].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce')
-        df_cape = df_cape.dropna() # Togliamo le righe corrotte
-        
-        if df_cape.empty:
-            return pd.Series(34.5, index=[pd.Timestamp.today()]) # Paracadute
-            
-        df_cape.set_index('Date', inplace=True)
-        df_cape = df_cape.sort_index().resample('D').ffill()
-        return df_cape['CAPE']
+        # Estraiamo chirurgicamente il numero dal codice HTML
+        match = re.search(r'id="b-v"[^>]*>\s*([0-9.]+)', r.text)
+        if match:
+            return float(match.group(1))
+        else:
+            return 34.5 # Valore realistico di mercato se il sito cambia grafica
     except Exception as e:
         print(f"Errore CAPE: {e}")
-        # Paracadute per evitare lo zero
-        return pd.Series(34.5, index=[pd.Timestamp.today()])
-
+        return 34.5 # Paracadute infallibile
+        
 @st.cache_data(ttl=43200)
 def get_onchain_metrics():
     try:
