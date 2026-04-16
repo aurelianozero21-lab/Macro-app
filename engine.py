@@ -21,19 +21,82 @@ def init_supabase():
 
 @st.cache_data(ttl=300)
 def get_live_prices():
+    """Recupera i prezzi live e li converte rigorosamente in numeri singoli."""
     tickers_list = ['BTC-USD', '^VIX', 'GC=F', '^GSPC', 'CL=F']
     prices = {}
     for t in tickers_list:
         try:
-            # Scarichiamo un solo ticker alla volta, è molto più probabile che passi il filtro
             d = yf.download(t, period="1d", interval="1m", progress=False, threads=False)
             if not d.empty:
-                prices[t] = d['Close'].iloc[-1]
+                val = d['Close'].iloc[-1]
+                # Se val è una Serie (tabellina), prendiamo il primo numero assoluto
+                if isinstance(val, pd.Series):
+                    val = val.iloc[0]
+                prices[t] = float(val)
             else:
                 prices[t] = 0.0
         except:
             prices[t] = 0.0
     return prices
+
+def check_smart_alerts(df, live_prices, tension_index, hash_status=""):
+    alerts = []
+    if df.empty:
+        return alerts
+        
+    current = df.iloc[-1]
+    
+    # Estrazione sicura del VIX (lo forziamo a diventare un numero puro)
+    try:
+        vix_live = live_prices.get('^VIX', current.get('VIX', 0))
+        if isinstance(vix_live, pd.Series): vix_live = vix_live.iloc[0]
+        if float(vix_live) > 28:
+            alerts.append("🚨 PANICO SUI MERCATI: Il VIX ha superato quota 28. Possibile crash azionario in corso.")
+    except: pass
+        
+    if tension_index >= 70:
+        alerts.append("🔥 ALLARME GEOPOLITICA: Indice di tensione alle stelle (>70). Controlla il prezzo dell'Oro e del Petrolio.")
+        
+    try:
+        z_sp = current.get('Z_S&P 500', 0)
+        z_hy = current.get('Z_High Yield', 0)
+        if isinstance(z_sp, pd.Series): z_sp = z_sp.iloc[0]
+        if isinstance(z_hy, pd.Series): z_hy = z_hy.iloc[0]
+        if float(z_sp) > 0 and float(z_hy) < -1:
+            alerts.append("⚠️ DIVERGENZA FATALE: L'S&P 500 sta salendo ma il mercato del credito spazzatura sta crollando. Le banche stanno uscendo.")
+    except: pass
+        
+    try:
+        btc_live = live_prices.get('BTC-USD', current.get('Bitcoin', 0))
+        if isinstance(btc_live, pd.Series): btc_live = btc_live.iloc[0]
+        
+        btc_ieri = df['Bitcoin'].iloc[-2]
+        if isinstance(btc_ieri, pd.Series): btc_ieri = btc_ieri.iloc[0]
+        
+        variazione_btc = ((float(btc_live) - float(btc_ieri)) / float(btc_ieri)) * 100
+        if variazione_btc < -7:
+            alerts.append(f"🩸 CRYPTO CRASH: Bitcoin sta perdendo oltre il 7% oggi ({variazione_btc:.1f}%).")
+        elif variazione_btc > 7:
+            alerts.append(f"🚀 CRYPTO PUMP: Bitcoin in volo di oltre il 7% oggi ({variazione_btc:.1f}%).")
+    except:
+        pass
+        
+    try:
+        yc_oggi = df['YieldCurve'].iloc[-1]
+        yc_ieri = df['YieldCurve'].iloc[-2]
+        if isinstance(yc_oggi, pd.Series): yc_oggi = yc_oggi.iloc[0]
+        if isinstance(yc_ieri, pd.Series): yc_ieri = yc_ieri.iloc[0]
+        if float(yc_ieri) > 0 and float(yc_oggi) < 0:
+            alerts.append("☠️ INVERSIONE DELLA CURVA: I tassi a 2 anni hanno appena superato i decennali. Il timer della recessione è partito.")
+    except:
+        pass
+        
+    if "CAPITULATION" in hash_status:
+        alerts.append("⛓️ ALLERTA ON-CHAIN: I Minatori di Bitcoin sono in Capitolazione (spengono le macchine). Spesso segna il minimo assoluto del mercato.")
+    elif "BUY SIGNAL" in hash_status:
+        alerts.append("💎 SEGNALE ON-CHAIN: I Minatori stanno ripartendo. Questo è storicamente uno dei più forti segnali di acquisto per Bitcoin.")
+        
+    return alerts
 
 @st.cache_data(ttl=86400)
 def get_shiller_pe():
@@ -232,49 +295,6 @@ def calcola_stagionalita(df, asset_name):
     
     return df_corrente, df_media
 
-def check_smart_alerts(df, live_prices, tension_index, hash_status=""):
-    alerts = []
-    
-    if df.empty:
-        return alerts
-        
-    current = df.iloc[-1]
-    
-    vix_live = live_prices.get('^VIX', current.get('VIX', 0))
-    if vix_live > 28:
-        alerts.append("🚨 PANICO SUI MERCATI: Il VIX ha superato quota 28. Possibile crash azionario in corso.")
-        
-    if tension_index >= 70:
-        alerts.append("🔥 ALLARME GEOPOLITICA: Indice di tensione alle stelle (>70). Controlla il prezzo dell'Oro e del Petrolio.")
-        
-    if current.get('Z_S&P 500', 0) > 0 and current.get('Z_High Yield', 0) < -1:
-        alerts.append("⚠️ DIVERGENZA FATALE: L'S&P 500 sta salendo ma il mercato del credito spazzatura sta crollando. Le banche stanno uscendo.")
-        
-    btc_live = live_prices.get('BTC-USD', current.get('Bitcoin', 0))
-    try:
-        btc_ieri = df['Bitcoin'].iloc[-2]
-        variazione_btc = ((btc_live - btc_ieri) / btc_ieri) * 100
-        if variazione_btc < -7:
-            alerts.append(f"🩸 CRYPTO CRASH: Bitcoin sta perdendo oltre il 7% oggi ({variazione_btc:.1f}%).")
-        elif variazione_btc > 7:
-            alerts.append(f"🚀 CRYPTO PUMP: Bitcoin in volo di oltre il 7% oggi ({variazione_btc:.1f}%).")
-    except:
-        pass
-        
-    try:
-        yc_oggi = df['YieldCurve'].iloc[-1]
-        yc_ieri = df['YieldCurve'].iloc[-2]
-        if yc_ieri > 0 and yc_oggi < 0:
-            alerts.append("☠️ INVERSIONE DELLA CURVA: I tassi a 2 anni hanno appena superato i decennali. Il timer della recessione è partito.")
-    except:
-        pass
-        
-    if "CAPITULATION" in hash_status:
-        alerts.append("⛓️ ALLERTA ON-CHAIN: I Minatori di Bitcoin sono in Capitolazione (spengono le macchine). Spesso segna il minimo assoluto del mercato.")
-    elif "BUY SIGNAL" in hash_status:
-        alerts.append("💎 SEGNALE ON-CHAIN: I Minatori stanno ripartendo. Questo è storicamente uno dei più forti segnali di acquisto per Bitcoin.")
-        
-    return alerts
 
 @st.cache_data(ttl=7200)
 def get_etf_screener():
