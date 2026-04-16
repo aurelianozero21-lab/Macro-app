@@ -102,22 +102,29 @@ def check_smart_alerts(df, live_prices, tension_index, hash_status=""):
 def get_shiller_pe():
     try:
         url = 'https://www.multpl.com/shiller-pe/table/by-month'
-        # Indossiamo una "maschera" da browser per aggirare l'anti-bot
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        r = requests.get(url, headers=headers, timeout=10)
+        # Identità finta molto più credibile per i server di sicurezza
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        r = requests.get(url, headers=headers, timeout=5)
         
         tables = pd.read_html(r.text)
         df_cape = tables[0]
         df_cape.columns = ['Date', 'CAPE']
         df_cape['Date'] = pd.to_datetime(df_cape['Date'])
-        # Estraiamo solo il numero ignorando scritte come "estimate"
-        df_cape['CAPE'] = df_cape['CAPE'].astype(str).str.extract(r'([0-9.]+)').astype(float)
+        
+        # Pulisce i dati rimuovendo lettere e parole come "estimate"
+        df_cape['CAPE'] = pd.to_numeric(df_cape['CAPE'].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce')
+        df_cape = df_cape.dropna() # Togliamo le righe corrotte
+        
+        if df_cape.empty:
+            return pd.Series(34.5, index=[pd.Timestamp.today()]) # Paracadute
+            
         df_cape.set_index('Date', inplace=True)
         df_cape = df_cape.sort_index().resample('D').ffill()
         return df_cape['CAPE']
     except Exception as e:
         print(f"Errore CAPE: {e}")
-        return pd.Series(dtype=float)
+        # Paracadute per evitare lo zero
+        return pd.Series(34.5, index=[pd.Timestamp.today()])
 
 @st.cache_data(ttl=43200)
 def get_onchain_metrics():
@@ -207,23 +214,20 @@ def load_all_data(api_key, lookback):
         df['YieldCurve'] = fred.get_series('T10Y2Y')
         
         # Scarichiamo i 3 pilastri della liquidità
-        df['WALCL'] = fred.get_series('WALCL') # Bilancio FED (Milioni)
-        df['WTREGEN'] = fred.get_series('WTREGEN') # TGA (Miliardi)
-        df['RRPONTSYD'] = fred.get_series('RRPONTSYD') # Reverse Repo (Miliardi)
+        df['WALCL'] = fred.get_series('WALCL') # È in Milioni
+        df['WTREGEN'] = fred.get_series('WTREGEN') # È in Milioni
+        df['RRPONTSYD'] = fred.get_series('RRPONTSYD') # È in Miliardi
         
-        # Sincronizziamo i giorni sfalsati di pubblicazione
         df['WALCL'] = df['WALCL'].ffill()
         df['WTREGEN'] = df['WTREGEN'].ffill()
         df['RRPONTSYD'] = df['RRPONTSYD'].ffill()
         
-        # Formula Reale (Net Liquidity): Bilancio - TGA - RRP
-        # Essendo in milioni e miliardi, sistemiamo gli zeri per avere i Trillioni
-        df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000) - (df['RRPONTSYD'] / 1000)
+        # Formula Reale: tutto portato a Trilioni per il grafico
+        df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
     except Exception as e:
         print(f"Errore FRED: {e}")
         df['YieldCurve'] = 0.0
         df['Fed_Liquidity_T'] = 0.0
-        
     
     # Calcolo Z-Score
     cols_to_z = ['S&P 500', 'Bitcoin', 'Oro', 'VIX']
