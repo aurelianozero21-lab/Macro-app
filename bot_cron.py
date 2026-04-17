@@ -16,7 +16,7 @@ if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_KEY, TG_TOKEN]):
     print("❌ Errore: Mancano chiavi segrete.")
     exit()
 
-print("✅ Inizio procedura Morning Briefing...")
+print("🚀🚀🚀 STO LEGGENDO IL FILE NUOVO 🚀🚀🚀")
 
 # 2. Estrazione Dati Globali (Inclusa la Cina: 000001.SS)
 tickers = ['^GSPC', 'BTC-USD', '^VIX', 'GC=F', 'CL=F', '^STOXX50E', '^N225', '000001.SS']
