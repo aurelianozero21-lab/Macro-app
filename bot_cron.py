@@ -135,15 +135,22 @@ conteggio = 0
 for user in utenti.data:
     chat_id = user['chat_id']
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": report, "parse_mode": "Markdown"}
     
+    # TENTATIVO 1: Invio con formattazione elegante (Markdown)
+    payload = {"chat_id": chat_id, "text": report, "parse_mode": "Markdown"}
     res = requests.post(url, json=payload)
     
+    # TENTATIVO 2 (PIANO B): Se Telegram fa i capricci con gli asterischi, inviamo senza formattazione
+    if res.status_code != 200 and "parse entities" in res.text:
+        print(f"⚠️ Capriccio di formattazione per {chat_id}, attivo il Piano B...")
+        payload_sicuro = {"chat_id": chat_id, "text": report}
+        res = requests.post(url, json=payload_sicuro)
+        
     if res.status_code == 200:
-        print(f"✅ Messaggio consegnato con successo a {chat_id}")
+        print(f"✅ Messaggio consegnato a {chat_id}")
         conteggio += 1
     else:
-        print(f"❌ Telegram ha RIFIUTATO il messaggio per {chat_id}! Motivo: {res.text}")
+        print(f"❌ Errore definitivo per {chat_id}: {res.text}")
         
     time.sleep(0.2)
 
