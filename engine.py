@@ -314,25 +314,62 @@ def calcola_stagionalita(df, asset_name):
     
     return df_corrente, df_media
 
-
-@st.cache_data(ttl=7200)
-def get_etf_screener():
-    tickers = {'USA (SPY)': 'SPY', 'Europa (VGK)': 'VGK', 'Emergenti (EEM)': 'EEM', 'Giappone (EWJ)': 'EWJ', 'Tech (XLK)': 'XLK', 'Salute (XLV)': 'XLV', 'Finanza (XLF)': 'XLF', 'Energia (XLE)': 'XLE', 'Utilities (XLU)': 'XLU', 'Industria (XLI)': 'XLI'}
-    dati = []
+@st.cache_data(ttl=3600)
+def get_etf_screener(fase_orologio="Sconosciuta"):
+    # Mappatura avanzata: Ticker, Categoria, e in quale fase macro "brillano"
+    etf_map = {
+        'Tecnologia (QQQ)': {'ticker': 'QQQ', 'cat': 'Settore', 'fase_top': 'Ripresa', 'fase_flop': 'Stagflazione'},
+        'Energia (XLE)': {'ticker': 'XLE', 'cat': 'Settore', 'fase_top': 'Surriscaldamento', 'fase_flop': 'Deflazione'},
+        'Bancari (XLF)': {'ticker': 'XLF', 'cat': 'Settore', 'fase_top': 'Surriscaldamento', 'fase_flop': 'Recessione'},
+        'Oro (GLD)': {'ticker': 'GLD', 'cat': 'Commodity', 'fase_top': 'Stagflazione', 'fase_flop': 'Ripresa'},
+        'Bond USA 20Y+ (TLT)': {'ticker': 'TLT', 'cat': 'Obbligazionario', 'fase_top': 'Deflazione', 'fase_flop': 'Surriscaldamento'},
+        'Mercati Emergenti (EEM)': {'ticker': 'EEM', 'cat': 'Geografia', 'fase_top': 'Reflazione', 'fase_flop': 'Stagflazione'},
+        'Europa (VGK)': {'ticker': 'VGK', 'cat': 'Geografia', 'fase_top': 'Ripresa', 'fase_flop': 'Recessione'}
+    }
+    
+    risultati = []
+    # Scarichiamo i dati di 2 mesi per calcolare la performance a 1 mese
+    tickers = [v['ticker'] for v in etf_map.values()]
     try:
-        lista_tk = list(tickers.values())
-        data = yf.download(lista_tk, period="1y", progress=False)
-        if 'Close' in data:
-            for nome, tk in tickers.items():
-                hist = data['Close'][tk].dropna()
-                if len(hist) > 50:
-                    prezzo, sma_50, sma_200 = hist.iloc[-1], hist.tail(50).mean(), hist.mean() 
-                    perf_1m = ((prezzo / hist.iloc[-21]) - 1) * 100
-                    segnale = "🟢 Compra" if prezzo > sma_50 and sma_50 > sma_200 else "🟡 Accumula" if prezzo > sma_50 else "🔴 Evita"
-                    tipo = 'Geografia' if tk in ['SPY', 'VGK', 'EEM', 'EWJ'] else 'Settore'
-                    dati.append({'Categoria': tipo, 'Asset': nome, 'Prezzo ($)': round(prezzo, 2), 'Perf. 1 Mese (%)': round(perf_1m, 2), 'Segnale Operativo': segnale})
-    except: pass
-    return pd.DataFrame(dati)
+        data = yf.download(tickers, period="2mo", progress=False, threads=False)['Close']
+    except:
+        return pd.DataFrame() # Ritorna vuoto se Yahoo fa i capricci
+        
+    for nome, info in etf_map.items():
+        ticker = info['ticker']
+        if ticker in data.columns and not data[ticker].dropna().empty:
+            serie = data[ticker].dropna()
+            prezzo_attuale = serie.iloc[-1]
+            prezzo_mese_fa = serie.iloc[0] # Approssimazione 1 mese fa
+            perf_1m = ((prezzo_attuale - prezzo_mese_fa) / prezzo_mese_fa) * 100
+            
+            # --- LOGICA DEL SEGNALE MACRO ---
+            segnale = "⚖️ HOLD (Neutrale)"
+            
+            # Se la fase in cui brilla è quella attuale:
+            if info['fase_top'] in fase_orologio:
+                if perf_1m < 0:
+                    segnale = "🟢 ACCUMULA (A Sconto)"
+                else:
+                    segnale = "🚀 STRONG BUY (Trend Certo)"
+            # Se la fase attuale è il suo veleno:
+            elif info['fase_flop'] in fase_orologio:
+                segnale = "🔴 SELL (Rischio Macro)"
+            # Condizioni speciali per Momentum Estremo
+            elif perf_1m > 10:
+                segnale = "⚠️ PRENDI PROFITTO (Ipercomprato)"
+            elif perf_1m < -10:
+                segnale = "🧐 WATCHLIST (Ipervenduto)"
+                
+            risultati.append({
+                'Asset': nome,
+                'Categoria': info['cat'],
+                'Prezzo ($)': round(prezzo_attuale, 2),
+                'Perf. 1 Mese (%)': round(perf_1m, 2),
+                'Segnale Operativo': segnale
+            })
+            
+    return pd.DataFrame(risultati)
 
 @st.cache_data(ttl=7200)
 def get_crypto_screener():
