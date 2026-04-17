@@ -79,6 +79,7 @@ NEWS: {news_string}
 """
 
 # 5. Generazione Report Narrativo
+print("🤖 Generazione report AI in corso...")
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
@@ -98,11 +99,24 @@ REGOLE DI SCRITTURA:
 Sii professionale, telegrafico ma fluido. Massimo 200 parole."""
 
 try:
-    report = model.generate_content(prompt).text
+    # Aggiungiamo i filtri di sicurezza abbassati per permettere le news di geopolitica
+    response = model.generate_content(
+        prompt,
+        safety_settings=[
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"}
+        ]
+    )
+    report = response.text
 except Exception as e:
-    report = "⚠️ Errore generazione report AI."
+    # Se fallisce, ora ci facciamo mandare L'ERRORE ESATTO su Telegram!
+    print(f"❌ Errore AI: {e}")
+    report = f"⚠️ Errore tecnico AI: {str(e)}"
 
 # 6. Invio Telegram
+print("📡 Invio messaggi...")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 utenti = supabase.table("telegram_users").select("chat_id").execute()
 
