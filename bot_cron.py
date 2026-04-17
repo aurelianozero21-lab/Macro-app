@@ -81,7 +81,17 @@ NEWS: {news_string}
 # 5. Generazione Report Narrativo
 print("🤖 Generazione report AI in corso...")
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+
+# --- RICERCA MODELLO INTELLIGENTE (ANTI-404 E ANTI-BLOCCO) ---
+modelli_disponibili = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+# Cerchiamo un modello "flash" (veloce e gratuito) ma ESCLUDIAMO il 2.5 (sperimentale, con limite di 5)
+modelli_sicuri = [m for m in modelli_disponibili if "flash" in m.lower() and "2.5" not in m.lower()]
+
+# Prende il miglior modello sicuro disponibile sul tuo account
+nome_modello = modelli_sicuri[0] if modelli_sicuri else modelli_disponibili[0]
+print(f"Modello selezionato in automatico: {nome_modello}")
+
+model = genai.GenerativeModel(nome_modello)
 
 prompt = f"""Sei un CIO istituzionale. Scrivi un Morning Briefing narrativo e incisivo (stile newsletter finanziaria).
 Usa questi dati: {context}
@@ -111,7 +121,6 @@ try:
     )
     report = response.text
 except Exception as e:
-    # Se fallisce, ora ci facciamo mandare L'ERRORE ESATTO su Telegram!
     print(f"❌ Errore AI: {e}")
     report = f"⚠️ Errore tecnico AI: {str(e)}"
 
