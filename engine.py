@@ -314,6 +314,10 @@ def calcola_stagionalita(df, asset_name):
     
     return df_corrente, df_media
 
+import yfinance as yf
+import pandas as pd
+import streamlit as st
+
 @st.cache_data(ttl=3600)
 def get_etf_screener(fase_orologio="Sconosciuta"):
     # Mappatura avanzata: Ticker, Categoria, e in quale fase macro "brillano"
@@ -339,8 +343,8 @@ def get_etf_screener(fase_orologio="Sconosciuta"):
         ticker = info['ticker']
         if ticker in data.columns and not data[ticker].dropna().empty:
             serie = data[ticker].dropna()
-            prezzo_attuale = serie.iloc[-1]
-            prezzo_mese_fa = serie.iloc[0] # Approssimazione 1 mese fa
+            prezzo_attuale = serie.iloc[-1].item() if hasattr(serie.iloc[-1], 'item') else serie.iloc[-1]
+            prezzo_mese_fa = serie.iloc[0].item() if hasattr(serie.iloc[0], 'item') else serie.iloc[0]
             perf_1m = ((prezzo_attuale - prezzo_mese_fa) / prezzo_mese_fa) * 100
             
             # --- LOGICA DEL SEGNALE MACRO ---
@@ -364,8 +368,8 @@ def get_etf_screener(fase_orologio="Sconosciuta"):
             risultati.append({
                 'Asset': nome,
                 'Categoria': info['cat'],
-                'Prezzo ($)': round(prezzo_attuale, 2),
-                'Perf. 1 Mese (%)': round(perf_1m, 2),
+                'Prezzo ($)': round(float(prezzo_attuale), 2),
+                'Perf. 1 Mese (%)': round(float(perf_1m), 2),
                 'Segnale Operativo': segnale
             })
             
