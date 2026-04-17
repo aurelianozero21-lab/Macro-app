@@ -6,7 +6,7 @@ import yfinance as yf
 import google.generativeai as genai
 from supabase import create_client
 
-# 1. Recupero delle chiavi segrete
+# 1. Recupero delle chiavi segrete da GitHub
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
@@ -16,9 +16,9 @@ if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_KEY, TG_TOKEN]):
     print("❌ Errore: Mancano chiavi segrete.")
     exit()
 
-print("✅ Inizio procedura Morning Briefing [VERSIONE NARRATIVA 3.0]...")
+print("✅ Inizio procedura Morning Briefing [VERSIONE MASTER 4.0]...")
 
-# 2. Estrazione Dati con Calcolo Variazioni Percentuali
+# 2. Estrazione Dati Globali (Inclusi Bond Treasury 10Y)
 tickers = {
     'SP500': '^GSPC', 
     'BTC': 'BTC-USD', 
@@ -27,10 +27,11 @@ tickers = {
     'PETROLIO': 'CL=F', 
     'EUROPA': '^STOXX50E', 
     'GIAPPONE': '^N225', 
-    'CINA': '000001.SS'
+    'CINA': '000001.SS',
+    'BOND_10Y': '^TNX'  # Treasury Yield 10 Anni
 }
 
-# Scarichiamo 5 giorni per essere sicuri di avere le ultime due chiusure valide
+# Scarichiamo 5 giorni per gestire i fusi orari e calcolare le variazioni
 data = yf.download(list(tickers.values()), period="5d", progress=False, threads=False)['Close'].ffill()
 
 def get_stats(ticker_code):
@@ -42,7 +43,7 @@ def get_stats(ticker_code):
     except:
         return 0, 0
 
-# Mappatura dei dati calcolati
+# Calcolo statistiche per ogni asset
 stats = {name: get_stats(t) for name, t in tickers.items()}
 
 try:
@@ -52,9 +53,9 @@ try:
 except:
     fgi, fgi_class = "N/A", "N/A"
 
-# 3. Estrazione News
+# 3. Estrazione News Geopolitiche e Macro
 try:
-    url_news = "https://news.google.com/rss/search?q=geopolitics+OR+oil+OR+china+OR+economy&hl=en-US&gl=US&ceid=US:en"
+    url_news = "https://news.google.com/rss/search?q=geopolitics+OR+fed+OR+economy+OR+markets&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url_news)
     news_string = " | ".join([entry.title for entry in feed.entries[:3]])
 except:
@@ -67,93 +68,71 @@ DATI DI MERCATO (Prezzo e Variazione %):
 - Bitcoin: ${stats['BTC'][0]:.0f} ({stats['BTC'][1]:+.2f}%)
 - Oro: ${stats['ORO'][0]:.2f} ({stats['ORO'][1]:+.2f}%)
 - Petrolio WTI: ${stats['PETROLIO'][0]:.2f} ({stats['PETROLIO'][1]:+.2f}%)
-- VIX: {stats['VIX'][0]:.2f}
+- Treasury 10Y Yield: {stats['BOND_10Y'][0]:.2f}% ({stats['BOND_10Y'][1]:+.2f}%)
+- VIX Index: {stats['VIX'][0]:.2f}
 
-SOLO VARIAZIONI PERCENTUALI (Per commento):
+SOLO VARIAZIONI PERCENTUALI (Per analisi comparativa):
 - Europa (Euro Stoxx): {stats['EUROPA'][1]:+.2f}%
 - Giappone (Nikkei): {stats['GIAPPONE'][1]:+.2f}%
 - Cina (Shanghai): {stats['CINA'][1]:+.2f}%
 
 SENTIMENT: Crypto Fear & Greed {fgi} ({fgi_class})
-NEWS: {news_string}
+NEWS RECENTI: {news_string}
 """
 
-# 5. Generazione Report Narrativo
+# 5. Generazione Report Narrativo Blindato
 print("🤖 Generazione report AI in corso...")
 genai.configure(api_key=GEMINI_KEY)
 
-# --- RICERCA MODELLO SUPER-BLINDATA ---
+# Ricerca automatica modello 1.5 (Gratuito e stabile)
 modelli_disponibili = [m for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-
-# Costringiamo Google a usare SOLO i modelli della famiglia 1.5 o 1.0 (gratuiti e stabili).
-# Escludiamo tutto ciò che è 2.0, 2.5 o "vision" (che serve per le immagini).
 modelli_sicuri = [m.name for m in modelli_disponibili if ("1.5" in m.name or "1.0" in m.name) and "vision" not in m.name]
-
-# Se la lista non è vuota prende il primo 1.5 disponibile, altrimenti forza il nome standard
 nome_modello = modelli_sicuri[0] if modelli_sicuri else "models/gemini-1.5-flash"
-print(f"Modello selezionato in automatico: {nome_modello}")
 
 model = genai.GenerativeModel(nome_modello)
 
-prompt = f"""Sei un CIO istituzionale. Scrivi un Morning Briefing narrativo e incisivo (stile newsletter finanziaria).
-Usa questi dati: {context}
+prompt = f"""Sei un Chief Investment Officer. Scrivi un Morning Briefing narrativo (stile newsletter finanziaria).
+Dati: {context}
 
-REGOLE DI SCRITTURA:
-1. INIZIA SEMPRE il messaggio con questo esatto titolo (in grassetto): 🏛️ **GLOBAL MACRO BRIEFING** 🏛️ (o quello che preferisci tu). Nessun altro saluto iniziale.
-2. NON fare elenchi puntati freddi. Scrivi paragrafi discorsivi.
-3. Per S&P 500, Oro, Petrolio e BTC: cita SEMPRE sia il prezzo che la variazione %.
-4. Per Europa e Asia (Cina/Giappone): cita SOLO la variazione percentuale nel discorso.
-5. Struttura il messaggio in 4 sezioni con queste emoji:
+REGOLE TASSATIVE:
+1. INIZIA SEMPRE con il titolo: 🏛️ **GLOBAL MACRO BRIEFING** 🏛️
+2. NON fare elenchi puntati. Scrivi paragrafi fluidi e professionali.
+3. Per S&P 500, Oro, Petrolio, BTC e Treasury 10Y: cita SEMPRE prezzo e variazione %.
+4. Per Europa e Asia: cita SOLO la variazione % nel discorso.
+5. Struttura in 5 sezioni:
    🌍 **MACRO & GEOPOLITICA**
-   📈 **EQUITIES** (Commenta USA, Europa e Asia confrontandole)
+   📈 **EQUITIES** (Confronta USA, Europa e Asia)
+   ⚖️ **BONDS & RATES** (Analizza il rendimento del Treasury 10Y e cosa implica per i mercati)
    🛢️ **COMMODITIES**
    🪙 **DIGITAL ASSETS**
 
-Sii professionale, telegrafico ma fluido. Massimo 200 parole."""
+Massimo 300 parole. Sii autorevole."""
 
 try:
     response = model.generate_content(
         prompt,
-        safety_settings=[
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"}
-        ]
+        safety_settings=[{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_DANGEROUS_CONTENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_SEXUALLY_EXPLICIT"]]
     )
     report = response.text
 except Exception as e:
-    print(f"❌ Errore AI: {e}")
-    report = f"⚠️ Errore tecnico AI: {str(e)}"
-    
-# 6. Invio Telegram
-print("📡 Connessione al database...")
+    report = f"⚠️ Errore AI: {str(e)}"
+
+# 6. Invio Telegram con "Piano B" per errori di formattazione
+print("📡 Invio messaggi...")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 utenti = supabase.table("telegram_users").select("chat_id").execute()
 
-print(f"👥 Trovati {len(utenti.data)} utenti nel database.")
-
-conteggio = 0
 for user in utenti.data:
     chat_id = user['chat_id']
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
     
-    # TENTATIVO 1: Invio con formattazione elegante (Markdown)
-    payload = {"chat_id": chat_id, "text": report, "parse_mode": "Markdown"}
-    res = requests.post(url, json=payload)
+    # Tentativo A (Elegante)
+    res = requests.post(url, json={"chat_id": chat_id, "text": report, "parse_mode": "Markdown"})
     
-    # TENTATIVO 2 (PIANO B): Se Telegram fa i capricci con gli asterischi, inviamo senza formattazione
-    if res.status_code != 200 and "parse entities" in res.text:
-        print(f"⚠️ Capriccio di formattazione per {chat_id}, attivo il Piano B...")
-        payload_sicuro = {"chat_id": chat_id, "text": report}
-        res = requests.post(url, json=payload_sicuro)
-        
-    if res.status_code == 200:
-        print(f"✅ Messaggio consegnato a {chat_id}")
-        conteggio += 1
-    else:
-        print(f"❌ Errore definitivo per {chat_id}: {res.text}")
-        
+    # Tentativo B (Sicuro - se il Markdown fallisce)
+    if res.status_code != 200:
+        requests.post(url, json={"chat_id": chat_id, "text": report})
+    
     time.sleep(0.2)
 
-print(f"🏁 Esecuzione terminata. Inviato a {conteggio} su {len(utenti.data)} utenti.")
+print(f"🏁 Finito! Report inviato a {len(utenti.data)} utenti.")
