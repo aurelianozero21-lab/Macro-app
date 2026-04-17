@@ -16,20 +16,34 @@ if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_KEY, TG_TOKEN]):
     print("❌ Errore: Mancano chiavi segrete.")
     exit()
 
-print("✅ Inizio procedura Morning Briefing [VERSIONE GLOBALE 2.0]...")
+print("✅ Inizio procedura Morning Briefing [VERSIONE NARRATIVA 3.0]...")
 
-# 2. Estrazione Dati Globali (Inclusa la Cina: 000001.SS)
-tickers = ['^GSPC', 'BTC-USD', '^VIX', 'GC=F', 'CL=F', '^STOXX50E', '^N225', '000001.SS']
-data = yf.download(tickers, period="5d", progress=False, threads=False)['Close'].ffill()
+# 2. Estrazione Dati con Calcolo Variazioni Percentuali
+tickers = {
+    'SP500': '^GSPC', 
+    'BTC': 'BTC-USD', 
+    'VIX': '^VIX', 
+    'ORO': 'GC=F', 
+    'PETROLIO': 'CL=F', 
+    'EUROPA': '^STOXX50E', 
+    'GIAPPONE': '^N225', 
+    'CINA': '000001.SS'
+}
 
-sp500 = data['^GSPC'].iloc[-1].item() if not data['^GSPC'].empty else 0
-vix = data['^VIX'].iloc[-1].item() if not data['^VIX'].empty else 0
-btc = data['BTC-USD'].iloc[-1].item() if not data['BTC-USD'].empty else 0
-oro = data['GC=F'].iloc[-1].item() if not data['GC=F'].empty else 0
-petrolio = data['CL=F'].iloc[-1].item() if not data['CL=F'].empty else 0
-europa = data['^STOXX50E'].iloc[-1].item() if not data['^STOXX50E'].empty else 0
-giappone = data['^N225'].iloc[-1].item() if not data['^N225'].empty else 0
-cina = data['000001.SS'].iloc[-1].item() if not data['000001.SS'].empty else 0
+# Scarichiamo 5 giorni per essere sicuri di avere le ultime due chiusure valide
+data = yf.download(list(tickers.values()), period="5d", progress=False, threads=False)['Close'].ffill()
+
+def get_stats(ticker_code):
+    try:
+        current_price = data[ticker_code].iloc[-1]
+        prev_price = data[ticker_code].iloc[-2]
+        pct_change = ((current_price - prev_price) / prev_price) * 100
+        return current_price, pct_change
+    except:
+        return 0, 0
+
+# Mappatura dei dati calcolati
+stats = {name: get_stats(t) for name, t in tickers.items()}
 
 try:
     fgi_res = requests.get("https://api.alternative.me/fng/").json()
@@ -38,75 +52,61 @@ try:
 except:
     fgi, fgi_class = "N/A", "N/A"
 
-# 3. Estrazione Ultime Notizie Geopolitiche
-print("📰 Lettura delle breaking news mondiali...")
+# 3. Estrazione News
 try:
-    url_news = "https://news.google.com/rss/search?q=geopolitics+OR+oil+OR+stock+market+OR+europe+OR+china&hl=en-US&gl=US&ceid=US:en"
+    url_news = "https://news.google.com/rss/search?q=geopolitics+OR+oil+OR+china+OR+economy&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url_news)
-    top_news = [entry.title for entry in feed.entries[:3]]
-    news_string = " | ".join(top_news)
-except Exception as e:
-    print(f"Errore RSS: {e}")
+    news_string = " | ".join([entry.title for entry in feed.entries[:3]])
+except:
     news_string = "Nessuna notizia di rilievo."
 
-# Il "Pasto" completo per l'AI
+# 4. Costruzione del contesto per l'AI
 context = f"""
-DATI FINANZIARI DI CHIUSURA:
-- USA (S&P 500): {sp500:.2f}
-- Europa (Euro Stoxx 50): {europa:.2f}
-- Giappone (Nikkei 225): {giappone:.2f}
-- Cina (Shanghai Composite): {cina:.2f}
-- Indice della Paura (VIX): {vix:.2f}
-- Oro: ${oro:.2f}
-- Petrolio (WTI): ${petrolio:.2f}
-- Bitcoin: ${btc:.0f}
-- Crypto Fear & Greed: {fgi} ({fgi_class})
+DATI DI MERCATO (Prezzo e Variazione %):
+- S&P 500: {stats['SP500'][0]:.2f} ({stats['SP500'][1]:+.2f}%)
+- Bitcoin: ${stats['BTC'][0]:.0f} ({stats['BTC'][1]:+.2f}%)
+- Oro: ${stats['ORO'][0]:.2f} ({stats['ORO'][1]:+.2f}%)
+- Petrolio WTI: ${stats['PETROLIO'][0]:.2f} ({stats['PETROLIO'][1]:+.2f}%)
+- VIX: {stats['VIX'][0]:.2f}
 
-ULTIME NOTIZIE GLOBALI:
-{news_string}
+SOLO VARIAZIONI PERCENTUALI (Per commento):
+- Europa (Euro Stoxx): {stats['EUROPA'][1]:+.2f}%
+- Giappone (Nikkei): {stats['GIAPPONE'][1]:+.2f}%
+- Cina (Shanghai): {stats['CINA'][1]:+.2f}%
+
+SENTIMENT: Crypto Fear & Greed {fgi} ({fgi_class})
+NEWS: {news_string}
 """
 
-# 4. Generazione Report con AI
-print("🤖 Generazione report AI in corso...")
+# 5. Generazione Report Narrativo
 genai.configure(api_key=GEMINI_KEY)
-nome_modello = "gemini-1.5-flash"
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+prompt = f"""Sei un CIO istituzionale. Scrivi un Morning Briefing narrativo e incisivo (stile newsletter finanziaria).
+Usa questi dati: {context}
+
+REGOLE DI SCRITTURA:
+1. NON fare elenchi puntati freddi. Scrivi paragrafi discorsivi.
+2. Per S&P 500, Oro, Petrolio e BTC: cita SEMPRE sia il prezzo che la variazione %.
+3. Per Europa e Asia (Cina/Giappone): cita SOLO la variazione percentuale nel discorso.
+4. Struttura il messaggio in 4 sezioni con queste emoji:
+   🌍 **MACRO & GEOPOLITICA**
+   📈 **EQUITIES** (Commenta USA, Europa e Asia confrontandole)
+   🛢️ **COMMODITIES**
+   🪙 **DIGITAL ASSETS**
+
+Sii professionale, telegrafico ma fluido. Massimo 200 parole."""
 
 try:
-    model = genai.GenerativeModel(nome_modello)
-    prompt = f"""Sei un Chief Investment Officer istituzionale. Scrivi il 'Morning Briefing' per un canale Telegram.
-    Usa questi dati appena aggiornati:
-    {context}
-    
-    DEVI obbligatoriamente usare questa struttura esatta e questi titoli per i tuoi paragrafi. Sii incisivo, usa tono istituzionale, non fare premesse, massimo 250 parole:
-    
-    🌍 **MACRO & GEOPOLITICA:** (Unisci le notizie odierne e il sentiment globale).
-    📉 **AZIONARIO GLOBALE (USA, EU, ASIA):** (Commenta le chiusure di S&P500, Europa, e metti a confronto la situazione tra Giappone e Cina. Cita il livello del VIX).
-    🛢️ **COMMODITIES:** (Analizza le mosse di Oro e Petrolio rispetto alle tensioni o alla domanda cinese).
-    🪙 **ASSET DIGITALI:** (Analizza Bitcoin e l'indice Fear & Greed).
-    
-    Concludi con una singola riga di Outlook strategico."""
-    
     report = model.generate_content(prompt).text
 except Exception as e:
-    print(f"❌ Errore AI: {e}")
-    report = f"📊 **Morning Briefing Raw**\nS&P500: {sp500:.2f}\nEuropa: {europa:.2f}\nCina: {cina:.2f}\nOro: ${oro:.2f}\nPetrolio: ${petrolio:.2f}\nBTC: ${btc:.0f}"
+    report = "⚠️ Errore generazione report AI."
 
-# 5. Invio massivo su Telegram
-print("📡 Connessione al database e invio messaggi...")
-try:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    utenti = supabase.table("telegram_users").select("chat_id").execute()
-    
-    conteggio = 0
-    for user in utenti.data:
-        chat_id = user['chat_id']
-        url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-        payload = {"chat_id": chat_id, "text": report, "parse_mode": "Markdown"}
-        res = requests.post(url, json=payload)
-        if res.status_code == 200: conteggio += 1
-        time.sleep(0.1)
+# 6. Invio Telegram
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+utenti = supabase.table("telegram_users").select("chat_id").execute()
 
-    print(f"🎉 Finito! Messaggio inviato a {conteggio} utenti.")
-
-except Exception as e:
-    print(f"❌ Errore invio: {e}")
+for user in utenti.data:
+    requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
+                  json={"chat_id": user['chat_id'], "text": report, "parse_mode": "Markdown"})
+    time.sleep(0.2)
