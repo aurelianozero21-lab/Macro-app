@@ -27,10 +27,18 @@ lookback = st.sidebar.slider("Giorni Media Mobile (Z-Score)", 30, 200, 90)
 
 with st.spinner("📊 Sincronizzazione Dati Live e Motori FED..."):
     try:
+        # Carichiamo prima i dati base
         df = load_all_data(st.secrets["FRED_API_KEY"], lookback)
+        
+        # Calcoliamo SUBITO l'orologio, perché ci serve per gli ETF!
+        fase_orologio, desc_orologio, asset_orologio, colore_orologio = calcola_orologio_ciclo(df)
+        
         live_prices = get_live_prices()
         hash_status, df_hash = get_onchain_metrics()
-        df_etfs = get_etf_screener()
+        
+        # Ora passiamo la fase corretta allo screener
+        df_etfs = get_etf_screener(fase_orologio)
+        
         tension_index, top_news, region_scores = analyze_geopolitics()
         current = df.iloc[-1] if not df.empty else pd.Series()
         supabase_client = init_supabase()
@@ -103,7 +111,7 @@ if "sidebar_report" in st.session_state:
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔔 Automazione Notifiche")
 url_id = st.query_params.get("id", "")
-bot_link = get_telegram_link()
+bot_link = get_telegram_link() if 'get_telegram_link' in globals() else "https://t.me/tuo_bot"
 
 st.sidebar.markdown(f"""
 <a href="{bot_link}" target="_blank" style="text-decoration:none;">
@@ -125,7 +133,7 @@ if st.sidebar.button("💾 Salva ID nel Database", use_container_width=True):
             else: st.sidebar.error("Errore DB Supabase.")
 
 # ==========================================
-# CORPO PRINCIPALE (EX TAB 1: MACROECONOMIA)
+# CORPO PRINCIPALE
 # ==========================================
 
 st.header("🚦 Semaforo Macro Intelligente")
@@ -147,12 +155,10 @@ col_live4.metric("VIX Index (Paura)", f"{vix_live:.2f}", delta="Volatilità", de
 # --- OROLOGIO DEL CICLO ECONOMICO ---
 st.markdown("---")
 st.header("⏱️ Orologio del Ciclo Economico")
-fase_orologio, desc_orologio, asset_orologio, colore_orologio = calcola_orologio_ciclo(df)
 
 col_clk1, col_clk2 = st.columns([1, 2])
 
 with col_clk1:
-    # Mostriamo la fase attuale con un box colorato
     if colore_orologio == "success":
         st.success(f"**Lancetta Attuale:**\n### {fase_orologio}")
     elif colore_orologio == "warning":
@@ -184,11 +190,13 @@ if not df_sp500_corrente.empty and not df_sp500_storico.empty:
     fig_season.update_layout(height=400, xaxis_title="Giorno dell'Anno (1-365)", yaxis_title="Performance Cumulata (Base 100)", margin=dict(l=0, r=0, t=10, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)'))
     st.plotly_chart(fig_season, use_container_width=True)
 
+# --- FED LIQUIDITY (CON DIAGNOSTICA SICURA) ---
 st.markdown("---")
 st.header("🌊 Fed Liquidity Tracker")
 st.write("Analisi di correlazione tra stampa di moneta (FED) e S&P 500.")
 
-if 'Fed_Liquidity_T' in df.columns and 'S&P 500' in df.columns:
+# Controlla che i dati esistano e non siano nulli (evita il crash del grafico)
+if 'Fed_Liquidity_T' in df.columns and 'S&P 500' in df.columns and pd.notna(df['Fed_Liquidity_T'].iloc[-1]) and df['Fed_Liquidity_T'].iloc[-1] != 0.0:
     fig_liq = go.Figure()
     fig_liq.add_trace(go.Scatter(x=df.index, y=df['S&P 500'], name='S&P 500', yaxis='y1', line=dict(color='#00b894', width=2)))
     fig_liq.add_trace(go.Scatter(x=df.index, y=df['Fed_Liquidity_T'], name='Net Liquidity ($T)', yaxis='y2', line=dict(color='#0984e3', width=2)))
@@ -198,6 +206,8 @@ if 'Fed_Liquidity_T' in df.columns and 'S&P 500' in df.columns:
         height=380, margin=dict(l=0, r=0, t=30, b=0), legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.5)')
     )
     st.plotly_chart(fig_liq, use_container_width=True)
+else:
+    st.warning("⚠️ **Dati FED temporaneamente non disponibili.** I server della Federal Reserve non hanno fornito i dati sulla liquidità in tempo utile. Il grafico riapparirà in automatico al prossimo aggiornamento.")
 
 st.markdown("---")
 st.header("👁️ Smart Money & Divergenze")
@@ -212,13 +222,32 @@ with col_sm2:
     if liq_delta > 0: st.success("🟢 **ESPANSIONE (Risk-On):** Il sistema è supportato dalla liquidità.")
     else: st.error("🔴 **CONTRAZIONE (Risk-Off):** La FED drena dollari. Rischio di correzione.")
 
+# --- NUOVO SCREENER ETF ISTITUZIONALE ---
 if not df_etfs.empty:
     st.markdown("---")
-    st.header("🗺️ Screener Settoriale & ETF")
-    col_g1, col_g2 = st.columns(2)
-    with col_g1: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Geografia'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Aree Geografiche").update_layout(coloraxis_showscale=False, height=350), use_container_width=True)
-    with col_g2: st.plotly_chart(px.bar(df_etfs[df_etfs['Categoria']=='Settore'], x='Asset', y='Perf. 1 Mese (%)', color='Perf. 1 Mese (%)', color_continuous_scale='RdYlGn', title="Settori S&P 500").update_layout(coloraxis_showscale=False, height=350), use_container_width=True)
-    st.dataframe(df_etfs[['Asset', 'Categoria', 'Prezzo ($)', 'Perf. 1 Mese (%)', 'Segnale Operativo']].sort_values(by='Perf. 1 Mese (%)', ascending=False), use_container_width=True, hide_index=True)
+    st.header(f"🗺️ Screener Istituzionale ETF")
+    st.write(f"I segnali operativi si basano sull'incrocio tra la performance recente e la fase macro attuale: **{fase_orologio}**.")
+    
+    # Rimuoviamo i grafici a barre superflui e usiamo il Column Config nativo di Streamlit per una UI "da terminale"
+    st.dataframe(
+        df_etfs.sort_values(by=['Segnale Operativo', 'Categoria']),
+        column_config={
+            "Asset": st.column_config.TextColumn("Nome Asset", width="medium"),
+            "Categoria": st.column_config.TextColumn("Classe", width="small"),
+            "Prezzo ($)": st.column_config.NumberColumn("Prezzo Corrente", format="$ %.2f"),
+            "Perf. 1 Mese (%)": st.column_config.ProgressColumn(
+                "Trend a 1 Mese",
+                help="Performance degli ultimi 30 giorni",
+                format="%.2f%%",
+                min_value=-15,
+                max_value=15,
+            ),
+            "Segnale Operativo": st.column_config.TextColumn("Segnale Macro-Aggiustato", width="medium")
+        },
+        hide_index=True,
+        use_container_width=True
+    )
+
 st.markdown("---")
 st.header("📉 Curva dei Rendimenti (Spread T10Y2Y)")
 st.write("La differenza tra i tassi a 10 anni e 2 anni. Se scende sotto lo zero (Inversione), il mercato sta segnalando una recessione imminente.")
@@ -243,7 +272,7 @@ if 'YieldCurve' in df.columns:
     )
     st.plotly_chart(fig_yield, use_container_width=True)
 
-    st.markdown("---")
+st.markdown("---")
 st.header("😰 Termometro del Panico (VIX vs VIX3M)")
 vix_val = live_prices.get('^VIX', current.get('VIX', 0))
 vix3m_val = live_prices.get('^VIX3M', 20.0) # Valore di default se manca
