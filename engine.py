@@ -199,24 +199,26 @@ def load_all_data(api_key, lookback):
         for col in ['BTC_ATH', 'BTC_Drawdown', 'Mayer_BTC', 'RSI_BTC']:
             df[col] = 0.0
 
-    # Dati Macro (FRED)
+  # Dati Macro (FRED)
     try:
         fred = Fred(api_key=api_key)
+        
+        # Scarichiamo i dati
         df['YieldCurve'] = fred.get_series('T10Y2Y')
+        df['WALCL'] = fred.get_series('WALCL')
+        df['WTREGEN'] = fred.get_series('WTREGEN')
+        df['RRPONTSYD'] = fred.get_series('RRPONTSYD')
         
-        # Scarichiamo i 3 pilastri della liquidità
-        df['WALCL'] = fred.get_series('WALCL') # È in Milioni
-        df['WTREGEN'] = fred.get_series('WTREGEN') # È in Milioni
-        df['RRPONTSYD'] = fred.get_series('RRPONTSYD') # È in Miliardi
-        
+        # FONDAMENTALE: Spalmiamo subito i dati in avanti per coprire giorni festivi e weekend
+        df['YieldCurve'] = df['YieldCurve'].ffill()
         df['WALCL'] = df['WALCL'].ffill()
         df['WTREGEN'] = df['WTREGEN'].ffill()
         df['RRPONTSYD'] = df['RRPONTSYD'].ffill()
         
-        # Formula Reale: tutto portato a Trilioni per il grafico
+        # Formula Reale (tutto in Trilioni)
         df['Fed_Liquidity_T'] = (df['WALCL'] / 1000000) - (df['WTREGEN'] / 1000000) - (df['RRPONTSYD'] / 1000)
     except Exception as e:
-        print(f"Errore FRED: {e}")
+        print(f"Errore API FRED: {e}")
         df['YieldCurve'] = 0.0
         df['Fed_Liquidity_T'] = 0.0
         
@@ -285,7 +287,7 @@ def calcola_backtest(df, pesi):
 
 # --- NUOVA FUNZIONE: STAGIONALITA' ---
 def calcola_stagionalita(df, asset_name):
-    if asset_name not in df.columns:
+    if asset_name not in df.columns or df.empty: 
         return pd.DataFrame(), pd.DataFrame()
         
     # Copia i dati e calcola il rendimento percentuale giornaliero
@@ -296,7 +298,8 @@ def calcola_stagionalita(df, asset_name):
     df_season['DayOfYear'] = df_season.index.dayofyear
     df_season['Year'] = df_season.index.year
     
-    anno_corrente = datetime.datetime.now().year
+    # IL FIX: Prende dinamicamente l'anno più recente dai dati (non dall'orologio del PC)
+    anno_corrente = df_season['Year'].max()
     
     # Isola l'anno in corso (normalizzato a 100 il 1 Gennaio)
     df_corrente = df_season[df_season['Year'] == anno_corrente].copy()
@@ -305,10 +308,9 @@ def calcola_stagionalita(df, asset_name):
         
     # Calcola la media storica escludendo l'anno corrente
     df_storico = df_season[df_season['Year'] < anno_corrente]
-    # Raggruppa per giorno dell'anno e fa la media dei rendimenti
     media_giornaliera = df_storico.groupby('DayOfYear')['Rendimento'].mean()
     
-    # Ricostruisce un anno "medio" basato sulla stagionalità (base 100)
+    # Ricostruisce un anno "medio" basato sulla stagionalità
     df_media = pd.DataFrame({'DayOfYear': media_giornaliera.index, 'RendimentoMedio': media_giornaliera.values})
     df_media['Cumulative Storico'] = (1 + df_media['RendimentoMedio']).cumprod() * 100
     
