@@ -16,11 +16,10 @@ if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_KEY, TG_TOKEN]):
     print("❌ Errore: Mancano chiavi segrete.")
     exit()
 
-print("🚀🚀🚀 STO LEGGENDO IL FILE NUOVO 🚀🚀🚀")
+print("✅ Inizio procedura Morning Briefing [VERSIONE GLOBALE 2.0]...")
 
 # 2. Estrazione Dati Globali (Inclusa la Cina: 000001.SS)
 tickers = ['^GSPC', 'BTC-USD', '^VIX', 'GC=F', 'CL=F', '^STOXX50E', '^N225', '000001.SS']
-# Scarichiamo 5 giorni e "riempiamo i buchi" (ffill) per fusi orari disallineati
 data = yf.download(tickers, period="5d", progress=False, threads=False)['Close'].ffill()
 
 sp500 = data['^GSPC'].iloc[-1].item() if not data['^GSPC'].empty else 0
@@ -39,7 +38,7 @@ try:
 except:
     fgi, fgi_class = "N/A", "N/A"
 
-# 3. Estrazione Ultime Notizie Geopolitiche (Con focus su Cina)
+# 3. Estrazione Ultime Notizie Geopolitiche
 print("📰 Lettura delle breaking news mondiali...")
 try:
     url_news = "https://news.google.com/rss/search?q=geopolitics+OR+oil+OR+stock+market+OR+europe+OR+china&hl=en-US&gl=US&ceid=US:en"
