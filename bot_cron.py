@@ -82,13 +82,15 @@ NEWS: {news_string}
 print("🤖 Generazione report AI in corso...")
 genai.configure(api_key=GEMINI_KEY)
 
-# --- RICERCA MODELLO INTELLIGENTE (ANTI-404 E ANTI-BLOCCO) ---
-modelli_disponibili = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-# Cerchiamo un modello "flash" (veloce e gratuito) ma ESCLUDIAMO il 2.5 (sperimentale, con limite di 5)
-modelli_sicuri = [m for m in modelli_disponibili if "flash" in m.lower() and "2.5" not in m.lower()]
+# --- RICERCA MODELLO SUPER-BLINDATA ---
+modelli_disponibili = [m for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
 
-# Prende il miglior modello sicuro disponibile sul tuo account
-nome_modello = modelli_sicuri[0] if modelli_sicuri else modelli_disponibili[0]
+# Costringiamo Google a usare SOLO i modelli della famiglia 1.5 o 1.0 (gratuiti e stabili).
+# Escludiamo tutto ciò che è 2.0, 2.5 o "vision" (che serve per le immagini).
+modelli_sicuri = [m.name for m in modelli_disponibili if ("1.5" in m.name or "1.0" in m.name) and "vision" not in m.name]
+
+# Se la lista non è vuota prende il primo 1.5 disponibile, altrimenti forza il nome standard
+nome_modello = modelli_sicuri[0] if modelli_sicuri else "models/gemini-1.5-flash"
 print(f"Modello selezionato in automatico: {nome_modello}")
 
 model = genai.GenerativeModel(nome_modello)
@@ -109,7 +111,6 @@ REGOLE DI SCRITTURA:
 Sii professionale, telegrafico ma fluido. Massimo 200 parole."""
 
 try:
-    # Aggiungiamo i filtri di sicurezza abbassati per permettere le news di geopolitica
     response = model.generate_content(
         prompt,
         safety_settings=[
@@ -123,7 +124,7 @@ try:
 except Exception as e:
     print(f"❌ Errore AI: {e}")
     report = f"⚠️ Errore tecnico AI: {str(e)}"
-
+    
 # 6. Invio Telegram
 print("📡 Connessione al database...")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
