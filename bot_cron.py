@@ -99,10 +99,11 @@ prompt = f"""Sei un CIO istituzionale. Scrivi un Morning Briefing narrativo e in
 Usa questi dati: {context}
 
 REGOLE DI SCRITTURA:
-1. NON fare elenchi puntati freddi. Scrivi paragrafi discorsivi.
-2. Per S&P 500, Oro, Petrolio e BTC: cita SEMPRE sia il prezzo che la variazione %.
-3. Per Europa e Asia (Cina/Giappone): cita SOLO la variazione percentuale nel discorso.
-4. Struttura il messaggio in 4 sezioni con queste emoji:
+1. INIZIA SEMPRE il messaggio con questo esatto titolo (in grassetto): 🏛️ **GLOBAL MACRO BRIEFING** 🏛️ (o quello che preferisci tu). Nessun altro saluto iniziale.
+2. NON fare elenchi puntati freddi. Scrivi paragrafi discorsivi.
+3. Per S&P 500, Oro, Petrolio e BTC: cita SEMPRE sia il prezzo che la variazione %.
+4. Per Europa e Asia (Cina/Giappone): cita SOLO la variazione percentuale nel discorso.
+5. Struttura il messaggio in 4 sezioni con queste emoji:
    🌍 **MACRO & GEOPOLITICA**
    📈 **EQUITIES** (Commenta USA, Europa e Asia confrontandole)
    🛢️ **COMMODITIES**
