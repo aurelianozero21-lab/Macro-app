@@ -125,11 +125,26 @@ except Exception as e:
     report = f"⚠️ Errore tecnico AI: {str(e)}"
 
 # 6. Invio Telegram
-print("📡 Invio messaggi...")
+print("📡 Connessione al database...")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 utenti = supabase.table("telegram_users").select("chat_id").execute()
 
+print(f"👥 Trovati {len(utenti.data)} utenti nel database.")
+
+conteggio = 0
 for user in utenti.data:
-    requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
-                  json={"chat_id": user['chat_id'], "text": report, "parse_mode": "Markdown"})
+    chat_id = user['chat_id']
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": report, "parse_mode": "Markdown"}
+    
+    res = requests.post(url, json=payload)
+    
+    if res.status_code == 200:
+        print(f"✅ Messaggio consegnato con successo a {chat_id}")
+        conteggio += 1
+    else:
+        print(f"❌ Telegram ha RIFIUTATO il messaggio per {chat_id}! Motivo: {res.text}")
+        
     time.sleep(0.2)
+
+print(f"🏁 Esecuzione terminata. Inviato a {conteggio} su {len(utenti.data)} utenti.")
